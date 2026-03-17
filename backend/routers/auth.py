@@ -12,9 +12,11 @@ async def get_login_url():
     """
     Get the Zerodha Kite login URL.
     """
-    if not broker_service.api_key or "your_api_key" in broker_service.api_key:
-        # Return a placeholder for testing if keys aren't set
-        return {"login_url": "https://kite.zerodha.com/connect/login?v=3&api_key=EXAMPLE_KEY", "warning": "Using placeholder API Key. Update .env with real credentials."}
+    if not broker_service.api_key or "your_api_key" in broker_service.api_key or "derthrawrxc8sokx" in broker_service.api_key:
+        raise HTTPException(
+            status_code=400, 
+            detail="Zerodha API Key is not configured. Please update the .env file with your real credentials."
+        )
     
     login_url = f"https://kite.zerodha.com/connect/login?v=3&api_key={broker_service.api_key}"
     return {"login_url": login_url}
