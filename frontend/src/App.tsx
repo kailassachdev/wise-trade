@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { 
-  TrendingUp, 
-  Activity, 
-  History, 
-  Cpu, 
-  Power, 
+import {
+  TrendingUp,
+  Activity,
+  History,
+  Cpu,
+  Power,
   ExternalLink,
   Shield,
   BarChart3,
@@ -21,9 +21,12 @@ import {
   WifiOff,
   ArrowUpRight,
   ArrowDownRight,
+  Search,
+  Wallet,
+  Package,
 } from 'lucide-react';
 
-type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders';
+type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders' | 'holdings';
 
 interface KiteProfile {
   user_id: string;
@@ -67,6 +70,9 @@ const App: React.FC = () => {
   const prevPricesRef = useRef<Record<string, number>>({});
   const [flashMap, setFlashMap] = useState<Record<string, 'up' | 'down'>>({});
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   const [orderForm, setOrderForm] = useState({
     variety: 'regular',
@@ -77,8 +83,11 @@ const App: React.FC = () => {
     product: 'CNC',
     order_type: 'MARKET',
     price: '',
+    trigger_price: '',
+    disclosed_quantity: '',
+    validity: 'DAY',
   });
-  const [orderStatus, setOrderStatus] = useState<{msg: string; type: 'success'|'error'} | null>(null);
+  const [orderStatus, setOrderStatus] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [orderLoading, setOrderLoading] = useState(false);
 
   useEffect(() => {
@@ -140,7 +149,7 @@ const App: React.FC = () => {
     setProfileLoading(true);
     try {
       // Frontend instructs backend to fetch profile from Zerodha
-      const res = await axios.get('http://localhost:8000/api/auth/profile');
+      const res = await axios.get('/api/auth/profile');
       if (res.data.status === 'success') {
         setProfile(res.data.data);
       }
@@ -173,7 +182,7 @@ const App: React.FC = () => {
   // ── Watchlist REST Polling (every 3 seconds) ──────────────────────────────
   const fetchWatchlist = async () => {
     try {
-      const res = await axios.get('http://localhost:8000/api/market/watchlist');
+      const res = await axios.get('/api/market/watchlist');
       if (res.data.error) {
         setPollStatus('error');
         return;
@@ -206,6 +215,28 @@ const App: React.FC = () => {
     }
   };
 
+  // ── Smart Global Stock Search (debounced) ───────────────────────────────────
+  useEffect(() => {
+    if (searchQuery.length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+    setIsSearching(true);
+    const timeout = setTimeout(async () => {
+      try {
+        const res = await axios.get(`http://localhost:8000/api/market/search?q=${searchQuery}`);
+        if (res.data.status === 'success') {
+          setSearchResults(res.data.results);
+        }
+      } catch (e) {
+        console.error("Search failed", e);
+      }
+      setIsSearching(false);
+    }, 600); // 600ms typing debounce
+    return () => clearTimeout(timeout);
+  }, [searchQuery]);
+
   // Start/stop polling based on broker connection
   useEffect(() => {
     if (brokerConnected) {
@@ -219,14 +250,14 @@ const App: React.FC = () => {
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
-  }, [brokerConnected]);
+  }, []);
 
   const handleZerodhaLogin = async () => {
     setIsConnecting(true);
     try {
       // Step 1: Ask backend to generate the dynamic login URL using API key from .env
       const res = await axios.get('http://localhost:8000/api/auth/zerodha/login');
-      
+
       // Step 2: Backend returns: { login_url: "https://kite.zerodha.com/connect/login?v=3&api_key=...", status: "initialized" }
       if (res.data.login_url) {
         console.log("Redirecting to Zerodha login:", res.data.login_url);
@@ -240,6 +271,21 @@ const App: React.FC = () => {
     }
   };
 
+  const handleWatchlistTrade = (symbol: string, transaction_type: 'BUY' | 'SELL', price: number) => {
+    setOrderForm(prev => ({
+      ...prev,
+      variety: 'amo',
+      exchange: 'NSE',
+      product: 'CNC',
+      tradingsymbol: symbol,
+      transaction_type,
+      // Provide a safe LIMIT price (e.g., 0.5% below for BUY to guarantee Zerodha AMO validation)
+      price: String((transaction_type === 'BUY' ? price * 0.995 : price * 1.005).toFixed(2)),
+      order_type: 'LIMIT'
+    }));
+    setActiveTab('orders');
+  };
+
   // ─── HOME DIRECTORY TAB ────────────────────────────────────
   const HomeTab = () => (
     <div className="home-layout fade-in">
@@ -248,14 +294,14 @@ const App: React.FC = () => {
         <TrendingUp size={48} color="var(--accent-blue)" style={{ marginBottom: '1rem' }} />
         <h1 style={{ fontSize: '3rem', letterSpacing: '-1px', marginBottom: '0.5rem' }}>SMART TRADE</h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '1.2rem' }}>AI-Powered Trading & Portfolio Management</p>
-        
+
         {/* Quick status dots */}
         <div style={{ display: 'flex', gap: '1.5rem', marginTop: '2.5rem', justifyContent: 'center' }}>
           <span className={`status-badge ${brokerConnected ? 'status-online' : 'status-offline'}`} style={{ padding: '8px 16px', fontSize: '0.9rem' }}>
             {brokerConnected ? <><CheckCircle size={14} style={{ display: 'inline', marginRight: '6px' }} />Broker Connected</> : 'Broker Offline'}
           </span>
           <span className={`status-badge ${agentStatus === 'ON' ? 'status-online' : 'status-offline'}`} style={{ padding: '8px 16px', fontSize: '0.9rem' }}>
-             {agentStatus === 'ON' ? 'Agent Active' : 'Agent Standby'}
+            {agentStatus === 'ON' ? 'Agent Active' : 'Agent Standby'}
           </span>
         </div>
       </div>
@@ -286,10 +332,10 @@ const App: React.FC = () => {
             <p>Monitor the live AI reasoning engine, track your net worth, and oversee your portfolio overview.</p>
           </div>
           <div className="feature-action" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'flex-end' }}>
-            <img 
-              src="/graph.png" 
-              alt="Market Trend" 
-              style={{ width: '100%', maxWidth: '400px', borderRadius: '16px', boxShadow: '0 10px 40px rgba(0,0,0,0.08)', border: '1px solid var(--border)' }} 
+            <img
+              src="/graph.png"
+              alt="Market Trend"
+              style={{ width: '100%', maxWidth: '400px', borderRadius: '16px', boxShadow: '0 10px 40px rgba(0,0,0,0.08)', border: '1px solid var(--border)' }}
             />
             <button className="btn-primary" onClick={() => setActiveTab('dashboard')}>View Dashboard</button>
           </div>
@@ -522,15 +568,30 @@ const App: React.FC = () => {
             <h3 style={{ margin: 0 }}>Live Watchlist</h3>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {/* Poll status indicator */}
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem',
+            {/* Poll status indicator and Search */}
+            <span style={{
+              display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem',
               color: pollStatus === 'polling' ? 'var(--accent-green)' : pollStatus === 'error' ? 'var(--accent-red)' : 'var(--text-secondary)',
-              fontWeight: 600 }}>
+              fontWeight: 600
+            }}>
               {pollStatus === 'polling' ? <Wifi size={13} /> : pollStatus === 'error' ? <WifiOff size={13} /> : <RefreshCw size={13} />}
               {pollStatus === 'polling' ? 'LIVE · 3s' : pollStatus === 'error' ? 'Error' : 'Waiting...'}
             </span>
+            <div style={{ position: 'relative', marginLeft: '10px' }}>
+              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+              <input
+                type="text"
+                placeholder="Search stocks..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{
+                  padding: '6px 12px 6px 30px', borderRadius: '20px', fontSize: '0.85rem', width: '200px',
+                  border: '1px solid var(--border)', background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)'
+                }}
+              />
+            </div>
             {pollStatus === 'error' && brokerConnected && (
-              <button onClick={fetchWatchlist} style={{ background: 'var(--accent-blue)', color: 'white', padding: '4px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600 }}>
+              <button onClick={fetchWatchlist} style={{ background: 'var(--accent-blue)', color: 'white', padding: '4px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600, marginLeft: '6px' }}>
                 Retry
               </button>
             )}
@@ -550,39 +611,77 @@ const App: React.FC = () => {
           </div>
         ) : (
           <div className="watchlist-table">
-            <div className="watchlist-header">
-              <span>Symbol</span>
+            <div className="watchlist-header" style={{ gridTemplateColumns: searchQuery.length >= 2 ? '3fr 1.5fr 1fr 1.5fr' : '1.8fr 1.2fr 1fr 1fr 1fr 1fr 1.5fr' }}>
+              <span>{searchQuery.length >= 2 ? 'Company Name & Symbol' : 'Symbol'}</span>
               <span style={{ textAlign: 'right' }}>LTP (₹)</span>
               <span style={{ textAlign: 'right' }}>Change</span>
-              <span style={{ textAlign: 'right' }}>Open</span>
-              <span style={{ textAlign: 'right' }}>High</span>
-              <span style={{ textAlign: 'right' }}>Low</span>
+              {searchQuery.length < 2 && (
+                <>
+                  <span style={{ textAlign: 'right' }}>Open</span>
+                  <span style={{ textAlign: 'right' }}>High</span>
+                  <span style={{ textAlign: 'right' }}>Low</span>
+                </>
+              )}
+              <span style={{ textAlign: 'right' }}>Trade</span>
             </div>
-            {watchlist.map(tick => {
+
+            {isSearching ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                <RefreshCw className="spin" size={20} style={{ margin: '0 auto 0.5rem' }} />
+                <p>Searching Yahoo Finance...</p>
+              </div>
+            ) : searchQuery.length >= 2 && searchResults.length === 0 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                <p>No valid Indian stocks found for "{searchQuery}"</p>
+              </div>
+            ) : (searchQuery.length >= 2 ? searchResults : watchlist).map((tick: any) => {
               const isUp = tick.change_pct >= 0;
               const flash = flashMap[tick.symbol];
+              const isSearchMode = searchQuery.length >= 2;
+
               return (
-                <div key={tick.symbol} className={`watchlist-row ${flash ? `flash-${flash}` : ''}`}>
+                <div key={tick.symbol} className={`watchlist-row ${flash ? `flash-${flash}` : ''}`}
+                  style={{ gridTemplateColumns: isSearchMode ? '3fr 1.5fr 1fr 1.5fr' : '1.8fr 1.2fr 1fr 1fr 1fr 1fr 1.5fr' }}>
                   <div className="watchlist-symbol">
-                    <span className="symbol-name">{tick.symbol}</span>
-                    <span className="symbol-exchange">{tick.exchange || 'NSE'}</span>
+                    <span className="symbol-name">{isSearchMode ? tick.name : tick.symbol}</span>
+                    <span className="symbol-exchange">{tick.symbol} • {tick.exchange || 'NSE'}</span>
                   </div>
                   <div style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                    {tick.last_price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {tick.last_price > 0
+                      ? tick.last_price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                      : 'N/A'}
                   </div>
-                  <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px',
-                    color: isUp ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 600, fontSize: '0.9rem' }}>
-                    {isUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                    {tick.change_pct.toFixed(2)}%
+                  <div style={{
+                    textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px',
+                    color: isUp ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 600, fontSize: '0.9rem'
+                  }}>
+                    {tick.last_price > 0 && (isUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />)}
+                    {tick.last_price > 0 ? `${tick.change_pct.toFixed(2)}%` : '—'}
                   </div>
-                  <div style={{ textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
-                    {tick.ohlc?.open?.toFixed(2) ?? '—'}
-                  </div>
-                  <div style={{ textAlign: 'right', color: 'var(--accent-green)', fontSize: '0.88rem' }}>
-                    {tick.ohlc?.high?.toFixed(2) ?? '—'}
-                  </div>
-                  <div style={{ textAlign: 'right', color: 'var(--accent-red)', fontSize: '0.88rem' }}>
-                    {tick.ohlc?.low?.toFixed(2) ?? '—'}
+
+                  {!isSearchMode && (
+                    <>
+                      <div style={{ textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
+                        {tick.ohlc?.open?.toFixed(2) ?? '—'}
+                      </div>
+                      <div style={{ textAlign: 'right', color: 'var(--accent-green)', fontSize: '0.88rem' }}>
+                        {tick.ohlc?.high?.toFixed(2) ?? '—'}
+                      </div>
+                      <div style={{ textAlign: 'right', color: 'var(--accent-red)', fontSize: '0.88rem' }}>
+                        {tick.ohlc?.low?.toFixed(2) ?? '—'}
+                      </div>
+                    </>
+                  )}
+
+                  <div style={{ textAlign: 'right', display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                    {tick.last_price > 0 ? (
+                      <>
+                        <button className="btn-trade-small btn-buy" onClick={() => handleWatchlistTrade(tick.symbol, 'BUY', tick.last_price)}>BUY</button>
+                        <button className="btn-trade-small btn-sell" onClick={() => handleWatchlistTrade(tick.symbol, 'SELL', tick.last_price)}>SELL</button>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Off-hours/Unavailable</span>
+                    )}
                   </div>
                 </div>
               );
@@ -627,18 +726,25 @@ const App: React.FC = () => {
       setOrderStatus(null);
       try {
         const payload: any = {
+          variety: orderForm.variety,
           exchange: orderForm.exchange,
-          tradingsymbol: orderForm.tradingsymbol,
+          symbol: orderForm.tradingsymbol, // Backend expects 'symbol'
           transaction_type: orderForm.transaction_type,
           quantity: Number(orderForm.quantity),
           product: orderForm.product,
           order_type: orderForm.order_type,
+          validity: orderForm.validity,
         };
         if (orderForm.order_type !== 'MARKET') payload.price = Number(orderForm.price);
-        const res = await axios.post(`/api/orders/${orderForm.variety}`, payload);
-        setOrderStatus({ msg: `✅ Order placed successfully! ID: ${res.data.order_id || 'OK'}`, type: 'success' });
+        if (orderForm.order_type === 'SL' || orderForm.order_type === 'SL-M') payload.trigger_price = Number(orderForm.trigger_price);
+        if (orderForm.disclosed_quantity) payload.disclosed_quantity = Number(orderForm.disclosed_quantity);
+
+        // Execute trade to backend route
+        const res = await axios.post(`/api/trade/execute`, payload);
+
+        setOrderStatus({ msg: `✅ ${res.data.message} | Order ID: ${res.data.order_id || 'OK'}`, type: 'success' });
       } catch (err: any) {
-        setOrderStatus({ msg: `❌ ${err.response?.data?.detail || 'Order failed. Check broker connection.'}`, type: 'error' });
+        setOrderStatus({ msg: `❌ ${err.response?.data?.detail || 'Order failed. Check backend logs.'}`, type: 'error' });
       } finally {
         setOrderLoading(false);
       }
@@ -656,7 +762,8 @@ const App: React.FC = () => {
               <h3 style={{ fontSize: '1.5rem', marginBottom: '0.4rem' }}>New Order</h3>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>Submit a buy or sell order directly via Zerodha Kite.</p>
               {orderStatus && (
-                <div style={{ padding: '0.9rem 1.2rem', borderRadius: '8px', marginBottom: '1.5rem', fontWeight: 600,
+                <div style={{
+                  padding: '0.9rem 1.2rem', borderRadius: '8px', marginBottom: '1.5rem', fontWeight: 600,
                   background: orderStatus.type === 'success' ? 'rgba(5,150,105,0.1)' : 'rgba(220,38,38,0.08)',
                   color: orderStatus.type === 'success' ? 'var(--accent-green)' : 'var(--accent-red)',
                   border: `1px solid ${orderStatus.type === 'success' ? 'rgba(5,150,105,0.3)' : 'rgba(220,38,38,0.3)'}`
@@ -664,17 +771,18 @@ const App: React.FC = () => {
               )}
               <form onSubmit={handleOrderSubmit}>
                 <div className="order-grid">
-                  {(['variety','exchange','transaction_type','order_type','product'] as const).map(key => {
+                  {(['variety', 'exchange', 'transaction_type', 'order_type', 'product', 'validity'] as const).map(key => {
                     const options: Record<string, string[]> = {
-                      variety: ['regular','co','amo','iceberg','auction'],
-                      exchange: ['NSE','BSE','NFO','MCX','BFO','CDS'],
-                      transaction_type: ['BUY','SELL'],
-                      order_type: ['MARKET','LIMIT','SL','SL-M'],
-                      product: ['CNC','MIS','NRML','MTF'],
+                      variety: ['regular', 'co', 'amo', 'iceberg', 'auction'],
+                      exchange: ['NSE', 'BSE', 'NFO', 'MCX', 'BFO', 'CDS'],
+                      transaction_type: ['BUY', 'SELL'],
+                      order_type: ['MARKET', 'LIMIT', 'SL', 'SL-M'],
+                      product: ['CNC', 'MIS', 'NRML', 'MTF'],
+                      validity: ['DAY', 'IOC', 'TTL'],
                     };
                     return (
                       <div className="order-field" key={key}>
-                        <label className="order-label">{key.replace(/_/g,' ').toUpperCase()}</label>
+                        <label className="order-label">{key.replace(/_/g, ' ').toUpperCase()}</label>
                         <select className="order-input" value={String(orderForm[key])} onChange={e => setOrderForm(f => ({ ...f, [key]: e.target.value }))}>
                           {options[key].map(o => <option key={o}>{o}</option>)}
                         </select>
@@ -698,12 +806,26 @@ const App: React.FC = () => {
                         onChange={e => setOrderForm(f => ({ ...f, price: e.target.value }))} required />
                     </div>
                   )}
+                  {(orderForm.order_type === 'SL' || orderForm.order_type === 'SL-M') && (
+                    <div className="order-field">
+                      <label className="order-label">TRIGGER PRICE</label>
+                      <input className="order-input" type="number" step="0.05" value={orderForm.trigger_price}
+                        onChange={e => setOrderForm(f => ({ ...f, trigger_price: e.target.value }))} required />
+                    </div>
+                  )}
+                  <div className="order-field">
+                    <label className="order-label">DISCLOSED QUANTITY</label>
+                    <input className="order-input" type="number" min={0} value={orderForm.disclosed_quantity} placeholder="Optional"
+                      onChange={e => setOrderForm(f => ({ ...f, disclosed_quantity: e.target.value }))} />
+                  </div>
                 </div>
                 <button type="submit" className="btn-primary" disabled={orderLoading}
-                  style={{ width: '100%', marginTop: '2rem', padding: '1rem', fontSize: '1.05rem',
+                  style={{
+                    width: '100%', marginTop: '2rem', padding: '1rem', fontSize: '1.05rem',
                     backgroundColor: orderForm.transaction_type === 'BUY' ? '#f59e0b' : 'var(--accent-red)',
                     justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px',
-                    opacity: orderLoading ? 0.7 : 1 }}>
+                    opacity: orderLoading ? 0.7 : 1
+                  }}>
                   <ShoppingCart size={18} />
                   {orderLoading ? 'Placing Order...' : `${orderForm.transaction_type} ${orderForm.tradingsymbol || '...'}`}
                 </button>
@@ -711,6 +833,82 @@ const App: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+    );
+  };
+  // ─── HOLDINGS TAB ────────────────────────────────────────────
+  const HoldingsTab = () => {
+    const holdings: any[] = portfolio.holdings || [];
+    const totalInvested = holdings.reduce((s: number, h: any) => s + (h.average_price * h.quantity), 0);
+    const totalCurrent = holdings.reduce((s: number, h: any) => s + (h.last_price * h.quantity), 0);
+    const totalPnl = totalCurrent - totalInvested;
+    const totalPnlPct = totalInvested ? (totalPnl / totalInvested) * 100 : 0;
+    return (
+      <div className="fade-in">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border)' }}>
+          <div>
+            <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Holdings</h2>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Stocks currently held in your demat account</p>
+          </div>
+          {holdings.length > 0 && (
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total P&L</p>
+              <p style={{ fontSize: '1.5rem', fontWeight: 800, color: totalPnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                {totalPnl >= 0 ? '+' : ''}₹{totalPnl.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              </p>
+              <p style={{ fontSize: '0.85rem', color: totalPnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 600 }}>
+                {totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(2)}%
+              </p>
+            </div>
+          )}
+        </div>
+        {!brokerConnected ? (
+          <div className="card glass" style={{ textAlign: 'center', padding: '3rem' }}>
+            <Wallet size={48} color="var(--text-secondary)" style={{ margin: '0 auto 1rem' }} />
+            <h3>Not Connected</h3>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>Connect your Zerodha account to view your holdings.</p>
+          </div>
+        ) : holdings.length === 0 ? (
+          <div className="card glass" style={{ textAlign: 'center', padding: '3rem' }}>
+            <Package size={48} color="var(--text-secondary)" style={{ margin: '0 auto 1rem' }} />
+            <h3>No Holdings</h3>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>You don't have any equity holdings in your demat account.</p>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+              <div className="card glass"><p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total Invested</p><h3 style={{ fontSize: '1.4rem', marginTop: '6px' }}>₹{totalInvested.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</h3></div>
+              <div className="card glass"><p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Current Value</p><h3 style={{ fontSize: '1.4rem', marginTop: '6px' }}>₹{totalCurrent.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</h3></div>
+              <div className="card glass"><p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total Holdings</p><h3 style={{ fontSize: '1.4rem', marginTop: '6px' }}>{holdings.length} stocks</h3></div>
+            </div>
+            <div className="card glass" style={{ overflow: 'hidden', padding: 0 }}>
+              <div className="holdings-header">
+                <span>Symbol</span><span style={{ textAlign: 'right' }}>Qty</span><span style={{ textAlign: 'right' }}>Avg Price</span><span style={{ textAlign: 'right' }}>LTP</span><span style={{ textAlign: 'right' }}>Invested</span><span style={{ textAlign: 'right' }}>Current</span><span style={{ textAlign: 'right' }}>P&L</span>
+              </div>
+              {holdings.map((h: any) => {
+                const invested = h.average_price * h.quantity;
+                const current = h.last_price * h.quantity;
+                const pnl = current - invested;
+                const pnlPct = invested ? (pnl / invested) * 100 : 0;
+                const isUp = pnl >= 0;
+                return (
+                  <div key={h.tradingsymbol} className="holdings-row">
+                    <div><p style={{ fontWeight: 700 }}>{h.tradingsymbol}</p><p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{h.exchange}</p></div>
+                    <div style={{ textAlign: 'right', fontWeight: 600 }}>{h.quantity}</div>
+                    <div style={{ textAlign: 'right' }}>₹{h.average_price?.toFixed(2)}</div>
+                    <div style={{ textAlign: 'right', fontWeight: 700 }}>₹{h.last_price?.toFixed(2)}</div>
+                    <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>₹{invested.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                    <div style={{ textAlign: 'right' }}>₹{current.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                    <div style={{ textAlign: 'right', color: isUp ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 700 }}>
+                      {isUp ? '+' : ''}₹{pnl.toFixed(0)}<br />
+                      <span style={{ fontSize: '0.75rem' }}>{isUp ? '+' : ''}{pnlPct.toFixed(2)}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
     );
   };
@@ -727,18 +925,24 @@ const App: React.FC = () => {
 
         {/* Nav */}
         <nav className="sidebar-nav">
-          <button className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
-            <Activity size={18} /> Dashboard
-          </button>
+          <p className="sidebar-nav-label">MAIN</p>
           <button className={`nav-item ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
             <User size={18} /> My Profile
           </button>
+          <button className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
+            <Activity size={18} /> Dashboard
+          </button>
+          <button className={`nav-item ${activeTab === 'holdings' ? 'active' : ''}`} onClick={() => setActiveTab('holdings')}>
+            <Wallet size={18} /> Holdings
+          </button>
+          <p className="sidebar-nav-label" style={{ marginTop: '0.75rem' }}>TRADING</p>
           <button className={`nav-item ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
             <ShoppingCart size={18} /> Place Order
           </button>
           <button className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
             <History size={18} /> Trade History
           </button>
+          <p className="sidebar-nav-label" style={{ marginTop: '0.75rem' }}>TOOLS</p>
           <button className={`nav-item ${activeTab === 'risk' ? 'active' : ''}`} onClick={() => setActiveTab('risk')}>
             <Shield size={18} /> Risk Manager
           </button>
@@ -774,16 +978,140 @@ const App: React.FC = () => {
 
         <div className="sidebar-content fade-in" key={activeTab}>
           {activeTab === 'dashboard' && DashboardTab()}
-          {activeTab === 'profile'   && ProfileTab()}
-          {activeTab === 'orders'    && OrdersTab()}
+          {activeTab === 'profile' && ProfileTab()}
+          {activeTab === 'orders' && OrdersTab()}
+          {activeTab === 'holdings' && HoldingsTab()}
 
-          {activeTab === 'history' && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '70vh', gap: '1rem', color: 'var(--text-secondary)' }}>
-              <History size={60} color="#a855f7" />
-              <h3 style={{ fontSize: '1.8rem', color: 'var(--text-primary)' }}>Trade History</h3>
-              <p style={{ fontSize: '1.1rem' }}>Coming soon: Full order and P&L history.</p>
-            </div>
-          )}
+          {activeTab === 'history' && (() => {
+            const [orders, setOrders] = React.useState<any[]>([]);
+            const [histLoading, setHistLoading] = React.useState(false);
+            const [filter, setFilter] = React.useState<string>('ALL');
+
+            React.useEffect(() => {
+              setHistLoading(true);
+              axios.get('/api/orders/orders')
+                .then(r => setOrders(r.data.orders || []))
+                .catch(() => setOrders([]))
+                .finally(() => setHistLoading(false));
+            }, []);
+
+            const statusColor: Record<string, string> = {
+              COMPLETE: 'var(--accent-green)',
+              REJECTED: 'var(--accent-red)',
+              CANCELLED: 'var(--text-secondary)',
+              OPEN: 'var(--accent-blue)',
+              PENDING: '#f59e0b',
+              TRIGGER_PENDING: '#f59e0b',
+            };
+            const statuses = ['ALL', 'COMPLETE', 'OPEN', 'REJECTED', 'CANCELLED'];
+            const displayed = filter === 'ALL' ? orders : orders.filter(o => o.status === filter);
+
+            return (
+              <div className="fade-in">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border)' }}>
+                  <div>
+                    <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Trade History</h2>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Orders for the day from Zerodha</p>
+                  </div>
+                  <button onClick={() => { setHistLoading(true); axios.get('/api/orders/orders').then(r => setOrders(r.data.orders || [])).finally(() => setHistLoading(false)); }}
+                    className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px', opacity: histLoading ? 0.7 : 1 }}>
+                    <RefreshCw size={14} className={histLoading ? 'spin' : ''} /> Refresh
+                  </button>
+                </div>
+
+                {/* Status filter */}
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+                  {statuses.map(s => (
+                    <button key={s} onClick={() => setFilter(s)} style={{
+                      padding: '0.4rem 0.9rem', borderRadius: '20px', border: '1.5px solid',
+                      borderColor: filter === s ? 'var(--accent-blue)' : 'var(--border)',
+                      background: filter === s ? 'rgba(37,99,235,0.1)' : 'transparent',
+                      color: filter === s ? 'var(--accent-blue)' : 'var(--text-secondary)',
+                      fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer'
+                    }}>{s}</button>
+                  ))}
+                  <span style={{ marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '2' }}>{displayed.length} order{displayed.length !== 1 ? 's' : ''}</span>
+                </div>
+
+                {!brokerConnected ? (
+                  <div className="card glass" style={{ textAlign: 'center', padding: '3rem' }}>
+                    <History size={48} color="var(--text-secondary)" style={{ margin: '0 auto 1rem' }} />
+                    <h3>Not Connected</h3>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>Connect your Zerodha account to view orders.</p>
+                  </div>
+                ) : histLoading ? (
+                  <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
+                    <RefreshCw size={32} className="spin" style={{ margin: '0 auto 1rem' }} />
+                    <p>Loading orders...</p>
+                  </div>
+                ) : displayed.length === 0 ? (
+                  <div className="card glass" style={{ textAlign: 'center', padding: '3rem' }}>
+                    <History size={48} color="var(--text-secondary)" style={{ margin: '0 auto 1rem' }} />
+                    <h3>No Orders</h3>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>No {filter !== 'ALL' ? filter.toLowerCase() + ' ' : ''}orders found for today.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {displayed.map((o: any, i: number) => (
+                      <div key={o.order_id || i} className="card glass" style={{ padding: '1.25rem 1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 800, fontSize: '1.05rem' }}>{o.tradingsymbol}</span>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', textTransform: 'uppercase', border: '1px solid var(--border)', padding: '2px 8px', borderRadius: '4px' }}>{o.exchange}</span>
+                            <span style={{
+                              fontSize: '0.78rem', fontWeight: 700, color: o.transaction_type === 'BUY' ? 'var(--accent-green)' : 'var(--accent-red)',
+                              background: o.transaction_type === 'BUY' ? 'rgba(5,150,105,0.1)' : 'rgba(220,38,38,0.08)',
+                              padding: '2px 10px', borderRadius: '20px', border: `1px solid ${o.transaction_type === 'BUY' ? 'rgba(5,150,105,0.3)' : 'rgba(220,38,38,0.3)'}`
+                            }}>
+                              {o.transaction_type}
+                            </span>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{o.variety} · {o.order_type} · {o.product}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{
+                              fontWeight: 700, fontSize: '0.82rem', padding: '3px 10px', borderRadius: '20px',
+                              color: statusColor[o.status] || 'var(--text-secondary)',
+                              background: `${statusColor[o.status] || 'var(--text-secondary)'}18`,
+                              border: `1px solid ${statusColor[o.status] || 'var(--border)'}40`
+                            }}>
+                              {o.status}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '0.75rem', marginTop: '1rem' }}>
+                          {[
+                            ['Order ID', o.order_id?.slice(-8)],
+                            ['Qty', o.quantity],
+                            ['Filled', o.filled_quantity],
+                            ['Pending', o.pending_quantity],
+                            ['Price', o.price ? `₹${o.price}` : 'MARKET'],
+                            ['Avg Price', o.average_price ? `₹${o.average_price}` : '—'],
+                            ['Validity', o.validity + (o.validity_ttl ? ` (${o.validity_ttl}m)` : '')],
+                            ['Time', o.order_timestamp ? new Date(o.order_timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'],
+                          ].map(([label, val]) => (
+                            <div key={String(label)}>
+                              <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>{label}</p>
+                              <p style={{ fontSize: '0.9rem', fontWeight: 600, marginTop: '2px' }}>{val}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {o.status_message && o.status !== 'COMPLETE' && (
+                          <div style={{
+                            marginTop: '0.75rem', padding: '0.6rem 0.9rem', borderRadius: '6px', fontSize: '0.8rem',
+                            background: 'rgba(220,38,38,0.06)', color: 'var(--accent-red)', borderLeft: '3px solid var(--accent-red)'
+                          }}>
+                            {o.status_message}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {activeTab === 'risk' && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '70vh', gap: '1rem', color: 'var(--text-secondary)' }}>

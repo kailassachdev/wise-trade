@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 class OrderRequest(BaseModel):
+    variety: str = "regular"
     exchange: str = "NSE"
     symbol: str
     transaction_type: str  # BUY or SELL
@@ -18,6 +19,9 @@ class OrderRequest(BaseModel):
     product: str = "CNC"  # CNC for delivery, MIS for intraday
     order_type: str = "MARKET"
     price: Optional[float] = None
+    trigger_price: Optional[float] = None
+    disclosed_quantity: Optional[int] = None
+    validity: str = "DAY"
     source: str = "manual"  # Origin: manual, technical_agent, news_agent, social_agent
     reason: str = "Manual trade"  # Why this trade was triggered
 
@@ -44,14 +48,17 @@ async def execute_trade(order: OrderRequest, session: Session = Depends(get_sess
         )
         
         order_id = broker_service.place_order(
-            variety="regular",
+            variety=order.variety,
             exchange=order.exchange,
             tradingsymbol=order.symbol,
             transaction_type=order.transaction_type,
             quantity=order.quantity,
             product=order.product,
             order_type=order.order_type,
-            price=order.price
+            price=order.price,
+            trigger_price=order.trigger_price,
+            disclosed_quantity=order.disclosed_quantity,
+            validity=order.validity
         )
 
         # 4. Save trade to local history for AI learning
@@ -77,4 +84,34 @@ async def execute_trade(order: OrderRequest, session: Session = Depends(get_sess
 
     except Exception as e:
         logger.error(f"[{order.source}] Trade Execution Failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/orders")
+async def get_orders(session: Session = Depends(get_session)):
+    """Fetch all orders (open + executed) for the day from Zerodha."""
+    try:
+        user = session.exec(select(User).order_by(User.id.desc())).first()
+        if not user or not user.kite_access_token:
+            raise HTTPException(status_code=401, detail="Broker not authenticated")
+        broker_service.set_access_token(user.kite_access_token)
+        orders = broker_service.kite.orders()
+        return {"status": "success", "orders": orders or []}
+    except Exception as e:
+        logger.error(f"Get orders failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/trades")
+async def get_trades(session: Session = Depends(get_session)):
+    """Fetch all executed trades for the day from Zerodha."""
+    try:
+        user = session.exec(select(User).order_by(User.id.desc())).first()
+        if not user or not user.kite_access_token:
+            raise HTTPException(status_code=401, detail="Broker not authenticated")
+        broker_service.set_access_token(user.kite_access_token)
+        trades = broker_service.kite.trades()
+        return {"status": "success", "trades": trades or []}
+    except Exception as e:
+        logger.error(f"Get trades failed: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))

@@ -54,6 +54,9 @@ class BrokerService:
                     product: str, 
                     order_type: str, 
                     price: Optional[float] = None, 
+                    trigger_price: Optional[float] = None,
+                    disclosed_quantity: Optional[int] = None,
+                    validity: str = "DAY",
                     stoploss: Optional[float] = None) -> str:
         """
         Place an order using Zerodha Kite API.
@@ -61,17 +64,22 @@ class BrokerService:
         if not self.kite:
             raise ValueError("Kite client not initialized")
             
-        order_id = self.kite.place_order(
-            variety=variety,
-            exchange=exchange,
-            tradingsymbol=tradingsymbol,
-            transaction_type=transaction_type,
-            quantity=quantity,
-            product=product,
-            order_type=order_type,
-            price=price,
-            stoploss=stoploss
-        )
+        kwargs = {
+            "variety": variety,
+            "exchange": exchange,
+            "tradingsymbol": tradingsymbol,
+            "transaction_type": transaction_type,
+            "quantity": quantity,
+            "product": product,
+            "order_type": order_type,
+            "validity": validity,
+        }
+        if price is not None: kwargs["price"] = price
+        if trigger_price is not None: kwargs["trigger_price"] = trigger_price
+        if disclosed_quantity is not None: kwargs["disclosed_quantity"] = disclosed_quantity
+        if stoploss is not None: kwargs["stoploss"] = stoploss
+            
+        order_id = self.kite.place_order(**kwargs)
         return order_id
 
     def get_profile(self) -> Dict[str, Any]:
