@@ -22,6 +22,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Search,
+  Wallet,
+  Package,
 } from 'lucide-react';
 
 type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders' | 'holdings';
