@@ -84,3 +84,6 @@ ehthumbs.db
 # Local batch overrides / personal scripts
 run_local*.bat
 local_*.bat
+
+metadata.json
+

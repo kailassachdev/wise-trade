@@ -21,9 +21,11 @@ import {
   WifiOff,
   ArrowUpRight,
   ArrowDownRight,
+  Wallet,
+  Package,
 } from 'lucide-react';
 
-type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders';
+type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders' | 'holdings';
 
 interface KiteProfile {
   user_id: string;
@@ -140,7 +142,7 @@ const App: React.FC = () => {
     setProfileLoading(true);
     try {
       // Frontend instructs backend to fetch profile from Zerodha
-      const res = await axios.get('http://localhost:8000/api/auth/profile');
+      const res = await axios.get('/api/auth/profile');
       if (res.data.status === 'success') {
         setProfile(res.data.data);
       }
@@ -173,7 +175,7 @@ const App: React.FC = () => {
   // ── Watchlist REST Polling (every 3 seconds) ──────────────────────────────
   const fetchWatchlist = async () => {
     try {
-      const res = await axios.get('http://localhost:8000/api/market/watchlist');
+      const res = await axios.get('/api/market/watchlist');
       if (res.data.error) {
         setPollStatus('error');
         return;
@@ -206,20 +208,14 @@ const App: React.FC = () => {
     }
   };
 
-  // Start/stop polling based on broker connection
+  // Start polling watchlist immediately on mount (yfinance doesn't need broker auth)
   useEffect(() => {
-    if (brokerConnected) {
-      fetchWatchlist(); // immediate first load
-      pollIntervalRef.current = setInterval(fetchWatchlist, 3000);
-    } else {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-      setWatchlist([]);
-      setPollStatus('idle');
-    }
+    fetchWatchlist();
+    pollIntervalRef.current = setInterval(fetchWatchlist, 10000); // every 10s to avoid yfinance rate limits
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
-  }, [brokerConnected]);
+  }, []);
 
   const handleZerodhaLogin = async () => {
     setIsConnecting(true);
@@ -714,6 +710,82 @@ const App: React.FC = () => {
       </div>
     );
   };
+  // ─── HOLDINGS TAB ────────────────────────────────────────────
+  const HoldingsTab = () => {
+    const holdings: any[] = portfolio.holdings || [];
+    const totalInvested = holdings.reduce((s: number, h: any) => s + (h.average_price * h.quantity), 0);
+    const totalCurrent  = holdings.reduce((s: number, h: any) => s + (h.last_price * h.quantity), 0);
+    const totalPnl      = totalCurrent - totalInvested;
+    const totalPnlPct   = totalInvested ? (totalPnl / totalInvested) * 100 : 0;
+    return (
+      <div className="fade-in">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border)' }}>
+          <div>
+            <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Holdings</h2>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Stocks currently held in your demat account</p>
+          </div>
+          {holdings.length > 0 && (
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total P&L</p>
+              <p style={{ fontSize: '1.5rem', fontWeight: 800, color: totalPnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                {totalPnl >= 0 ? '+' : ''}₹{totalPnl.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              </p>
+              <p style={{ fontSize: '0.85rem', color: totalPnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 600 }}>
+                {totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(2)}%
+              </p>
+            </div>
+          )}
+        </div>
+        {!brokerConnected ? (
+          <div className="card glass" style={{ textAlign: 'center', padding: '3rem' }}>
+            <Wallet size={48} color="var(--text-secondary)" style={{ margin: '0 auto 1rem' }} />
+            <h3>Not Connected</h3>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>Connect your Zerodha account to view your holdings.</p>
+          </div>
+        ) : holdings.length === 0 ? (
+          <div className="card glass" style={{ textAlign: 'center', padding: '3rem' }}>
+            <Package size={48} color="var(--text-secondary)" style={{ margin: '0 auto 1rem' }} />
+            <h3>No Holdings</h3>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>You don't have any equity holdings in your demat account.</p>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+              <div className="card glass"><p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total Invested</p><h3 style={{ fontSize: '1.4rem', marginTop: '6px' }}>₹{totalInvested.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</h3></div>
+              <div className="card glass"><p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Current Value</p><h3 style={{ fontSize: '1.4rem', marginTop: '6px' }}>₹{totalCurrent.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</h3></div>
+              <div className="card glass"><p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total Holdings</p><h3 style={{ fontSize: '1.4rem', marginTop: '6px' }}>{holdings.length} stocks</h3></div>
+            </div>
+            <div className="card glass" style={{ overflow: 'hidden', padding: 0 }}>
+              <div className="holdings-header">
+                <span>Symbol</span><span style={{ textAlign: 'right' }}>Qty</span><span style={{ textAlign: 'right' }}>Avg Price</span><span style={{ textAlign: 'right' }}>LTP</span><span style={{ textAlign: 'right' }}>Invested</span><span style={{ textAlign: 'right' }}>Current</span><span style={{ textAlign: 'right' }}>P&L</span>
+              </div>
+              {holdings.map((h: any) => {
+                const invested = h.average_price * h.quantity;
+                const current  = h.last_price * h.quantity;
+                const pnl      = current - invested;
+                const pnlPct   = invested ? (pnl / invested) * 100 : 0;
+                const isUp     = pnl >= 0;
+                return (
+                  <div key={h.tradingsymbol} className="holdings-row">
+                    <div><p style={{ fontWeight: 700 }}>{h.tradingsymbol}</p><p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{h.exchange}</p></div>
+                    <div style={{ textAlign: 'right', fontWeight: 600 }}>{h.quantity}</div>
+                    <div style={{ textAlign: 'right' }}>₹{h.average_price?.toFixed(2)}</div>
+                    <div style={{ textAlign: 'right', fontWeight: 700 }}>₹{h.last_price?.toFixed(2)}</div>
+                    <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>₹{invested.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                    <div style={{ textAlign: 'right' }}>₹{current.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                    <div style={{ textAlign: 'right', color: isUp ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 700 }}>
+                      {isUp ? '+' : ''}₹{pnl.toFixed(0)}<br/>
+                      <span style={{ fontSize: '0.75rem' }}>{isUp ? '+' : ''}{pnlPct.toFixed(2)}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="app-shell">
@@ -727,18 +799,24 @@ const App: React.FC = () => {
 
         {/* Nav */}
         <nav className="sidebar-nav">
-          <button className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
-            <Activity size={18} /> Dashboard
-          </button>
+          <p className="sidebar-nav-label">MAIN</p>
           <button className={`nav-item ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
             <User size={18} /> My Profile
           </button>
+          <button className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
+            <Activity size={18} /> Dashboard
+          </button>
+          <button className={`nav-item ${activeTab === 'holdings' ? 'active' : ''}`} onClick={() => setActiveTab('holdings')}>
+            <Wallet size={18} /> Holdings
+          </button>
+          <p className="sidebar-nav-label" style={{ marginTop: '0.75rem' }}>TRADING</p>
           <button className={`nav-item ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
             <ShoppingCart size={18} /> Place Order
           </button>
           <button className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
             <History size={18} /> Trade History
           </button>
+          <p className="sidebar-nav-label" style={{ marginTop: '0.75rem' }}>TOOLS</p>
           <button className={`nav-item ${activeTab === 'risk' ? 'active' : ''}`} onClick={() => setActiveTab('risk')}>
             <Shield size={18} /> Risk Manager
           </button>
@@ -776,14 +854,132 @@ const App: React.FC = () => {
           {activeTab === 'dashboard' && DashboardTab()}
           {activeTab === 'profile'   && ProfileTab()}
           {activeTab === 'orders'    && OrdersTab()}
+          {activeTab === 'holdings'  && HoldingsTab()}
 
-          {activeTab === 'history' && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '70vh', gap: '1rem', color: 'var(--text-secondary)' }}>
-              <History size={60} color="#a855f7" />
-              <h3 style={{ fontSize: '1.8rem', color: 'var(--text-primary)' }}>Trade History</h3>
-              <p style={{ fontSize: '1.1rem' }}>Coming soon: Full order and P&L history.</p>
-            </div>
-          )}
+          {activeTab === 'history' && (() => {
+            const [orders, setOrders] = React.useState<any[]>([]);
+            const [histLoading, setHistLoading] = React.useState(false);
+            const [filter, setFilter] = React.useState<string>('ALL');
+
+            React.useEffect(() => {
+              setHistLoading(true);
+              axios.get('/api/orders/orders')
+                .then(r => setOrders(r.data.orders || []))
+                .catch(() => setOrders([]))
+                .finally(() => setHistLoading(false));
+            }, []);
+
+            const statusColor: Record<string, string> = {
+              COMPLETE:  'var(--accent-green)',
+              REJECTED:  'var(--accent-red)',
+              CANCELLED: 'var(--text-secondary)',
+              OPEN:      'var(--accent-blue)',
+              PENDING:   '#f59e0b',
+              TRIGGER_PENDING: '#f59e0b',
+            };
+            const statuses = ['ALL', 'COMPLETE', 'OPEN', 'REJECTED', 'CANCELLED'];
+            const displayed = filter === 'ALL' ? orders : orders.filter(o => o.status === filter);
+
+            return (
+              <div className="fade-in">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border)' }}>
+                  <div>
+                    <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Trade History</h2>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Orders for the day from Zerodha</p>
+                  </div>
+                  <button onClick={() => { setHistLoading(true); axios.get('/api/orders/orders').then(r => setOrders(r.data.orders||[])).finally(()=>setHistLoading(false)); }}
+                    className="btn-primary" style={{ display:'flex', alignItems:'center', gap:'6px', opacity: histLoading ? 0.7:1 }}>
+                    <RefreshCw size={14} className={histLoading ? 'spin':''} /> Refresh
+                  </button>
+                </div>
+
+                {/* Status filter */}
+                <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap', marginBottom:'1.5rem' }}>
+                  {statuses.map(s => (
+                    <button key={s} onClick={()=>setFilter(s)} style={{
+                      padding:'0.4rem 0.9rem', borderRadius:'20px', border:'1.5px solid',
+                      borderColor: filter===s ? 'var(--accent-blue)':'var(--border)',
+                      background: filter===s ? 'rgba(37,99,235,0.1)':'transparent',
+                      color: filter===s ? 'var(--accent-blue)':'var(--text-secondary)',
+                      fontWeight: 600, fontSize:'0.82rem', cursor:'pointer'
+                    }}>{s}</button>
+                  ))}
+                  <span style={{ marginLeft:'auto', color:'var(--text-secondary)', fontSize:'0.85rem', lineHeight:'2' }}>{displayed.length} order{displayed.length !== 1 ? 's':''}</span>
+                </div>
+
+                {!brokerConnected ? (
+                  <div className="card glass" style={{ textAlign:'center', padding:'3rem' }}>
+                    <History size={48} color="var(--text-secondary)" style={{ margin:'0 auto 1rem' }} />
+                    <h3>Not Connected</h3>
+                    <p style={{ color:'var(--text-secondary)', marginTop:'0.5rem' }}>Connect your Zerodha account to view orders.</p>
+                  </div>
+                ) : histLoading ? (
+                  <div style={{ textAlign:'center', padding:'3rem', color:'var(--text-secondary)' }}>
+                    <RefreshCw size={32} className="spin" style={{ margin:'0 auto 1rem' }} />
+                    <p>Loading orders...</p>
+                  </div>
+                ) : displayed.length === 0 ? (
+                  <div className="card glass" style={{ textAlign:'center', padding:'3rem' }}>
+                    <History size={48} color="var(--text-secondary)" style={{ margin:'0 auto 1rem' }} />
+                    <h3>No Orders</h3>
+                    <p style={{ color:'var(--text-secondary)', marginTop:'0.5rem' }}>No {filter !== 'ALL' ? filter.toLowerCase()+' ' : ''}orders found for today.</p>
+                  </div>
+                ) : (
+                  <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem' }}>
+                    {displayed.map((o: any, i: number) => (
+                      <div key={o.order_id || i} className="card glass" style={{ padding:'1.25rem 1.5rem' }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:'0.5rem' }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', flexWrap:'wrap' }}>
+                            <span style={{ fontWeight:800, fontSize:'1.05rem' }}>{o.tradingsymbol}</span>
+                            <span style={{ fontSize:'0.72rem', color:'var(--text-secondary)', textTransform:'uppercase', border:'1px solid var(--border)', padding:'2px 8px', borderRadius:'4px' }}>{o.exchange}</span>
+                            <span style={{ fontSize:'0.78rem', fontWeight:700, color: o.transaction_type==='BUY' ? 'var(--accent-green)':'var(--accent-red)',
+                              background: o.transaction_type==='BUY' ? 'rgba(5,150,105,0.1)':'rgba(220,38,38,0.08)',
+                              padding:'2px 10px', borderRadius:'20px', border:`1px solid ${o.transaction_type==='BUY'?'rgba(5,150,105,0.3)':'rgba(220,38,38,0.3)'}` }}>
+                              {o.transaction_type}
+                            </span>
+                            <span style={{ fontSize:'0.75rem', color:'var(--text-secondary)', textTransform:'uppercase' }}>{o.variety} · {o.order_type} · {o.product}</span>
+                          </div>
+                          <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                            <span style={{ fontWeight:700, fontSize:'0.82rem', padding:'3px 10px', borderRadius:'20px',
+                              color: statusColor[o.status] || 'var(--text-secondary)',
+                              background: `${statusColor[o.status] || 'var(--text-secondary)'}18`,
+                              border:`1px solid ${statusColor[o.status] || 'var(--border)'}40` }}>
+                              {o.status}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(130px, 1fr))', gap:'0.75rem', marginTop:'1rem' }}>
+                          {[
+                            ['Order ID',    o.order_id?.slice(-8)],
+                            ['Qty',         o.quantity],
+                            ['Filled',      o.filled_quantity],
+                            ['Pending',     o.pending_quantity],
+                            ['Price',       o.price ? `₹${o.price}` : 'MARKET'],
+                            ['Avg Price',   o.average_price ? `₹${o.average_price}` : '—'],
+                            ['Validity',    o.validity + (o.validity_ttl ? ` (${o.validity_ttl}m)` : '')],
+                            ['Time',        o.order_timestamp ? new Date(o.order_timestamp).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' }) : '—'],
+                          ].map(([label, val]) => (
+                            <div key={String(label)}>
+                              <p style={{ fontSize:'0.7rem', color:'var(--text-secondary)', textTransform:'uppercase', letterSpacing:'0.06em', fontWeight:700 }}>{label}</p>
+                              <p style={{ fontSize:'0.9rem', fontWeight:600, marginTop:'2px' }}>{val}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {o.status_message && o.status !== 'COMPLETE' && (
+                          <div style={{ marginTop:'0.75rem', padding:'0.6rem 0.9rem', borderRadius:'6px', fontSize:'0.8rem',
+                            background:'rgba(220,38,38,0.06)', color:'var(--accent-red)', borderLeft:'3px solid var(--accent-red)' }}>
+                            {o.status_message}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {activeTab === 'risk' && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '70vh', gap: '1rem', color: 'var(--text-secondary)' }}>

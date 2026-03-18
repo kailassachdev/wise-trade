@@ -446,3 +446,45 @@ button {
 .watchlist-symbol { display: flex; flex-direction: column; gap: 2px; }
 .symbol-name { font-weight: 700; color: var(--text-primary); font-size: 0.92rem; }
 .symbol-exchange { font-size: 0.7rem; color: var(--text-secondary); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* ── Holdings Table ──────────────────────────────────────────── */
+.holdings-header {
+  display: grid;
+  grid-template-columns: 2fr 0.75fr 1.1fr 1.1fr 1.2fr 1.2fr 1.2fr;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.02);
+}
+
+.holdings-row {
+  display: grid;
+  grid-template-columns: 2fr 0.75fr 1.1fr 1.1fr 1.2fr 1.2fr 1.2fr;
+  padding: 0.85rem 1.25rem;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.88rem;
+  transition: background 0.15s;
+}
+.holdings-row:last-child { border-bottom: none; }
+.holdings-row:hover { background: rgba(37, 99, 235, 0.03); }
+
+/* ── Sidebar Nav Labels ──────────────────────────────────────── */
+.sidebar-nav-label {
+  font-size: 0.67rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  padding: 0.2rem 0.5rem;
+  margin-bottom: 0.15rem;
+}
+
+/* Responsive: hide labels on small/collapsed sidebar */
+@media (max-width: 768px) {
+  .sidebar-nav-label { display: none; }
+}
