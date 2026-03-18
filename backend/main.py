@@ -36,8 +36,9 @@ if __name__ == "__main__":
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
 
 # Routers will be included here
-from .routers import auth, trade, portfolio, agent
+from .routers import auth, trade, portfolio, agent, market
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(trade.router, prefix="/api/trade", tags=["Trading"])
 app.include_router(portfolio.router, prefix="/api/portfolio", tags=["Portfolio"])
 app.include_router(agent.router, prefix="/api/agent", tags=["Agent Management"])
+app.include_router(market.router, prefix="/api/market", tags=["Market Data"])

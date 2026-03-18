@@ -409,3 +409,40 @@ button {
 .profile-chip-row {
   margin-bottom: 1.5rem;
 }
+
+/* ── Watchlist Table ──────────────────────────────────────── */
+.watchlist-table { width: 100%; border-radius: 8px; overflow: hidden; }
+
+.watchlist-header {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1fr 1fr 1fr 1fr;
+  padding: 0.5rem 1rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.02);
+}
+
+.watchlist-row {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1fr 1fr 1fr 1fr;
+  padding: 0.65rem 1rem;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s ease;
+  font-size: 0.9rem;
+}
+.watchlist-row:last-child { border-bottom: none; }
+.watchlist-row:hover { background: rgba(37,99,235,0.04); }
+
+.watchlist-row.flash-up   { animation: flashUp 0.6s ease; }
+.watchlist-row.flash-down { animation: flashDown 0.6s ease; }
+@keyframes flashUp   { 0% { background: rgba(5,150,105,0.2); }   100% { background: transparent; } }
+@keyframes flashDown { 0% { background: rgba(220,38,38,0.15); }  100% { background: transparent; } }
+
+.watchlist-symbol { display: flex; flex-direction: column; gap: 2px; }
+.symbol-name { font-weight: 700; color: var(--text-primary); font-size: 0.92rem; }
+.symbol-exchange { font-size: 0.7rem; color: var(--text-secondary); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }

@@ -1,5 +1,5 @@
 fastapi
-uvicorn
+uvicorn[standard]
 sqlalchemy
 sqlmodel
 alembic
@@ -13,3 +13,4 @@ kiteconnect
 ollama
 python-dotenv
 aiohttp
+websockets

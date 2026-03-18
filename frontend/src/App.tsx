@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { 
   TrendingUp, 
@@ -17,6 +17,10 @@ import {
   Briefcase,
   CheckCircle,
   ShoppingCart,
+  Wifi,
+  WifiOff,
+  ArrowUpRight,
+  ArrowDownRight,
 } from 'lucide-react';
 
 type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders';
@@ -35,6 +39,17 @@ interface KiteProfile {
   meta?: { demat_consent: string };
 }
 
+interface WatchlistTick {
+  instrument_token: number;
+  symbol: string;
+  exchange: string;
+  last_price: number;
+  change: number;
+  change_pct: number;
+  volume?: number;
+  ohlc: { open?: number; high?: number; low?: number; close?: number };
+}
+
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [agentStatus, setAgentStatus] = useState<'ON' | 'OFF'>('OFF');
@@ -45,6 +60,14 @@ const App: React.FC = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [profile, setProfile] = useState<KiteProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
+
+  // Watchlist polling state
+  const [watchlist, setWatchlist] = useState<WatchlistTick[]>([]);
+  const [pollStatus, setPollStatus] = useState<'idle' | 'polling' | 'error'>('idle');
+  const prevPricesRef = useRef<Record<string, number>>({});
+  const [flashMap, setFlashMap] = useState<Record<string, 'up' | 'down'>>({});
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const [orderForm, setOrderForm] = useState({
     variety: 'regular',
     exchange: 'NSE',
@@ -146,6 +169,57 @@ const App: React.FC = () => {
       alert("Failed to toggle agent. Is the backend running?");
     }
   };
+
+  // ── Watchlist REST Polling (every 3 seconds) ──────────────────────────────
+  const fetchWatchlist = async () => {
+    try {
+      const res = await axios.get('http://localhost:8000/api/market/watchlist');
+      if (res.data.error) {
+        setPollStatus('error');
+        return;
+      }
+      const items: WatchlistTick[] = res.data.items || [];
+
+      // Detect price changes for flash animation
+      const newFlash: Record<string, 'up' | 'down'> = {};
+      items.forEach(tick => {
+        const prev = prevPricesRef.current[tick.symbol];
+        if (prev !== undefined && tick.last_price !== prev) {
+          newFlash[tick.symbol] = tick.last_price > prev ? 'up' : 'down';
+        }
+        prevPricesRef.current[tick.symbol] = tick.last_price;
+      });
+
+      if (Object.keys(newFlash).length > 0) {
+        setFlashMap(f => ({ ...f, ...newFlash }));
+        setTimeout(() => setFlashMap(f => {
+          const cleared = { ...f };
+          Object.keys(newFlash).forEach(k => delete cleared[k]);
+          return cleared;
+        }), 600);
+      }
+
+      setWatchlist(items);
+      setPollStatus('polling');
+    } catch (e) {
+      setPollStatus('error');
+    }
+  };
+
+  // Start/stop polling based on broker connection
+  useEffect(() => {
+    if (brokerConnected) {
+      fetchWatchlist(); // immediate first load
+      pollIntervalRef.current = setInterval(fetchWatchlist, 3000);
+    } else {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      setWatchlist([]);
+      setPollStatus('idle');
+    }
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, [brokerConnected]);
 
   const handleZerodhaLogin = async () => {
     setIsConnecting(true);
@@ -421,7 +495,8 @@ const App: React.FC = () => {
         </button>
       </div>
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginBottom: '2rem' }}>
+      {/* Stats row */}
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginBottom: '1.5rem' }}>
         <div className="card glass">
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Net Worth</p>
           <h2 style={{ fontSize: '1.8rem', margin: '8px 0' }}>₹ {portfolio.margins?.equity?.net?.toLocaleString() || '0'}</h2>
@@ -439,44 +514,108 @@ const App: React.FC = () => {
         </div>
       </section>
 
-      <section style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
-        <div className="card glass">
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-            <h3>Live Market Analysis</h3>
-            <BarChart3 size={20} color="var(--text-secondary)" />
+      {/* Live Watchlist */}
+      <div className="card glass" style={{ marginBottom: '1.5rem', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <BarChart3 size={20} color="var(--accent-blue)" />
+            <h3 style={{ margin: 0 }}>Live Watchlist</h3>
           </div>
-          <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', border: '1px dashed var(--border)', borderRadius: '8px' }}>
-            TradingView Chart Placeholder
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Poll status indicator */}
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem',
+              color: pollStatus === 'polling' ? 'var(--accent-green)' : pollStatus === 'error' ? 'var(--accent-red)' : 'var(--text-secondary)',
+              fontWeight: 600 }}>
+              {pollStatus === 'polling' ? <Wifi size={13} /> : pollStatus === 'error' ? <WifiOff size={13} /> : <RefreshCw size={13} />}
+              {pollStatus === 'polling' ? 'LIVE · 3s' : pollStatus === 'error' ? 'Error' : 'Waiting...'}
+            </span>
+            {pollStatus === 'error' && brokerConnected && (
+              <button onClick={fetchWatchlist} style={{ background: 'var(--accent-blue)', color: 'white', padding: '4px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600 }}>
+                Retry
+              </button>
+            )}
           </div>
         </div>
 
-        <div className="card glass">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem' }}>
-            <Cpu size={20} color="var(--accent-blue)" />
-            <h3>AI Reasoning Engine</h3>
+        {/* Watchlist Table */}
+        {!brokerConnected ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+            <WifiOff size={32} style={{ margin: '0 auto 0.75rem' }} />
+            <p>Connect Zerodha broker to see live prices.</p>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', borderLeft: '4px solid var(--accent-blue)' }}>
-              <p style={{ fontSize: '0.85rem', fontWeight: '600', marginBottom: '4px' }}>
-                Last Decision: {agentStatus === 'ON' ? 'Analyzing...' : 'Standby'}
-              </p>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                {agentStatus === 'ON'
-                  ? "DeepSeek is scanning NSE:RELIANCE for entry signals based on RSI and MACD divergence."
-                  : "Agent is inactive. Start agent to enable AI reasoning."}
-              </p>
+        ) : watchlist.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+            <RefreshCw size={24} className="spin" style={{ margin: '0 auto 0.75rem' }} />
+            <p>Connecting to market feed...</p>
+          </div>
+        ) : (
+          <div className="watchlist-table">
+            <div className="watchlist-header">
+              <span>Symbol</span>
+              <span style={{ textAlign: 'right' }}>LTP (₹)</span>
+              <span style={{ textAlign: 'right' }}>Change</span>
+              <span style={{ textAlign: 'right' }}>Open</span>
+              <span style={{ textAlign: 'right' }}>High</span>
+              <span style={{ textAlign: 'right' }}>Low</span>
             </div>
-            <div style={{ fontSize: '0.85rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span>Confidence Score</span><span>0%</span>
-              </div>
-              <div style={{ height: '6px', background: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
-                <div style={{ width: '0%', height: '100%', background: 'var(--accent-blue)' }}></div>
-              </div>
-            </div>
+            {watchlist.map(tick => {
+              const isUp = tick.change_pct >= 0;
+              const flash = flashMap[tick.symbol];
+              return (
+                <div key={tick.symbol} className={`watchlist-row ${flash ? `flash-${flash}` : ''}`}>
+                  <div className="watchlist-symbol">
+                    <span className="symbol-name">{tick.symbol}</span>
+                    <span className="symbol-exchange">{tick.exchange || 'NSE'}</span>
+                  </div>
+                  <div style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                    {tick.last_price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px',
+                    color: isUp ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 600, fontSize: '0.9rem' }}>
+                    {isUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                    {tick.change_pct.toFixed(2)}%
+                  </div>
+                  <div style={{ textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
+                    {tick.ohlc?.open?.toFixed(2) ?? '—'}
+                  </div>
+                  <div style={{ textAlign: 'right', color: 'var(--accent-green)', fontSize: '0.88rem' }}>
+                    {tick.ohlc?.high?.toFixed(2) ?? '—'}
+                  </div>
+                  <div style={{ textAlign: 'right', color: 'var(--accent-red)', fontSize: '0.88rem' }}>
+                    {tick.ohlc?.low?.toFixed(2) ?? '—'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* AI Engine */}
+      <div className="card glass">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem' }}>
+          <Cpu size={20} color="var(--accent-blue)" />
+          <h3>AI Reasoning Engine</h3>
+        </div>
+        <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.08)', borderLeft: '4px solid var(--accent-blue)', marginBottom: '1rem' }}>
+          <p style={{ fontSize: '0.85rem', fontWeight: '600', marginBottom: '4px' }}>
+            Last Decision: {agentStatus === 'ON' ? 'Analyzing...' : 'Standby'}
+          </p>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            {agentStatus === 'ON'
+              ? 'DeepSeek is scanning NSE:RELIANCE for entry signals based on RSI and MACD divergence.'
+              : 'Agent is inactive. Start agent to enable AI reasoning.'}
+          </p>
+        </div>
+        <div style={{ fontSize: '0.85rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+            <span>Confidence Score</span><span>0%</span>
+          </div>
+          <div style={{ height: '6px', background: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+            <div style={{ width: '0%', height: '100%', background: 'var(--accent-blue)' }}></div>
           </div>
         </div>
-      </section>
+      </div>
     </div>
   );
 
@@ -634,9 +773,9 @@ const App: React.FC = () => {
         )}
 
         <div className="sidebar-content fade-in" key={activeTab}>
-          {activeTab === 'dashboard' && <DashboardTab />}
-          {activeTab === 'profile'   && <ProfileTab />}
-          {activeTab === 'orders'    && <OrdersTab />}
+          {activeTab === 'dashboard' && DashboardTab()}
+          {activeTab === 'profile'   && ProfileTab()}
+          {activeTab === 'orders'    && OrdersTab()}
 
           {activeTab === 'history' && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '70vh', gap: '1rem', color: 'var(--text-secondary)' }}>
