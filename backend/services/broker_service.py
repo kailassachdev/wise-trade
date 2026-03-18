@@ -2,6 +2,9 @@ from kiteconnect import KiteConnect
 import logging
 from typing import Dict, Any, List, Optional
 import os
+from dotenv import load_dotenv
+
+load_dotenv("env")
 
 logger = logging.getLogger(__name__)
 

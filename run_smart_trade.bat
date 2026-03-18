@@ -15,7 +15,7 @@ pip install -r backend/requirements.txt
 :: Start Backend in a new window
 echo Starting FastAPI Backend...
 :: Running uvicorn from root to support package imports
-start cmd /k "uvicorn backend.main:app --reload --port 8000"
+start cmd /k "python -m uvicorn backend.main:app --reload --port 8000"
 
 :: Start Ollama AI Model in a new window
 echo Starting Ollama (DeepSeek)...

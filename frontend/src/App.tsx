@@ -16,9 +16,9 @@ import {
   Hash,
   Briefcase,
   CheckCircle,
-} from 'lucide-react';
+import { ShoppingCart } from 'lucide-react';
 
-type Tab = 'dashboard' | 'profile' | 'history' | 'risk';
+type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders';
 
 interface KiteProfile {
   user_id: string;
@@ -35,7 +35,7 @@ interface KiteProfile {
 }
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [activeTab, setActiveTab] = useState<Tab>('home');
   const [agentStatus, setAgentStatus] = useState<'ON' | 'OFF'>('OFF');
   const [portfolio, setPortfolio] = useState<any>({ margins: {}, positions: [], holdings: [] });
   const [brokerConnected, setBrokerConnected] = useState<boolean>(false);
@@ -44,6 +44,18 @@ const App: React.FC = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [profile, setProfile] = useState<KiteProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [orderForm, setOrderForm] = useState({
+    variety: 'regular',
+    exchange: 'NSE',
+    tradingsymbol: '',
+    transaction_type: 'BUY',
+    quantity: 1,
+    product: 'CNC',
+    order_type: 'MARKET',
+    price: '',
+  });
+  const [orderStatus, setOrderStatus] = useState<{msg: string; type: 'success'|'error'} | null>(null);
+  const [orderLoading, setOrderLoading] = useState(false);
 
   useEffect(() => {
     // Check for auth status in URL
@@ -153,24 +165,122 @@ const App: React.FC = () => {
     }
   };
 
+  // ─── HOME DIRECTORY TAB ────────────────────────────────────
+  const HomeTab = () => (
+    <div className="home-layout fade-in">
+      {/* Hero Banner */}
+      <div className="hero-banner">
+        <TrendingUp size={48} color="var(--accent-blue)" style={{ marginBottom: '1rem' }} />
+        <h1 style={{ fontSize: '3rem', letterSpacing: '-1px', marginBottom: '0.5rem' }}>SMART TRADE</h1>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '1.2rem' }}>AI-Powered Trading & Portfolio Management</p>
+        
+        {/* Quick status dots */}
+        <div style={{ display: 'flex', gap: '1.5rem', marginTop: '2.5rem', justifyContent: 'center' }}>
+          <span className={`status-badge ${brokerConnected ? 'status-online' : 'status-offline'}`} style={{ padding: '8px 16px', fontSize: '0.9rem' }}>
+            {brokerConnected ? <><CheckCircle size={14} style={{ display: 'inline', marginRight: '6px' }} />Broker Connected</> : 'Broker Offline'}
+          </span>
+          <span className={`status-badge ${agentStatus === 'ON' ? 'status-online' : 'status-offline'}`} style={{ padding: '8px 16px', fontSize: '0.9rem' }}>
+             {agentStatus === 'ON' ? 'Agent Active' : 'Agent Standby'}
+          </span>
+        </div>
+      </div>
+
+      {/* Navigation Feature Rows */}
+      <div className="directory-list">
+        {/* Profile: Text Left, Button Right */}
+        <div className="feature-row">
+          <div className="feature-text">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
+              <User size={48} color="var(--accent-blue)" />
+              <h3 style={{ margin: 0, fontSize: '2.5rem' }}>My Profile</h3>
+            </div>
+            <p>Manage your Zerodha Kite connection, view demat status, and review account permissions.</p>
+          </div>
+          <div className="feature-action">
+            <button className="btn-primary" onClick={() => setActiveTab('profile')}>View Profile</button>
+          </div>
+        </div>
+
+        {/* Dashboard: Text Right, Button Left */}
+        <div className="feature-row reverse">
+          <div className="feature-text" style={{ textAlign: 'right' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
+              <h3 style={{ margin: 0, fontSize: '2.5rem' }}>Dashboard</h3>
+              <Activity size={48} color="var(--accent-green)" />
+            </div>
+            <p>Monitor the live AI reasoning engine, track your net worth, and oversee your portfolio overview.</p>
+          </div>
+          <div className="feature-action" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'flex-end' }}>
+            <img 
+              src="/graph.png" 
+              alt="Market Trend" 
+              style={{ width: '100%', maxWidth: '400px', borderRadius: '16px', boxShadow: '0 10px 40px rgba(0,0,0,0.08)', border: '1px solid var(--border)' }} 
+            />
+            <button className="btn-primary" onClick={() => setActiveTab('dashboard')}>View Dashboard</button>
+          </div>
+        </div>
+
+        {/* Orders: Text Left, Button Right */}
+        <div className="feature-row">
+          <div className="feature-text">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
+              <ShoppingCart size={48} color="#f59e0b" />
+              <h3 style={{ margin: 0, fontSize: '2.5rem' }}>Place Order</h3>
+            </div>
+            <p>Manually place buy or sell orders on NSE/BSE directly via your Zerodha Kite broker.</p>
+          </div>
+          <div className="feature-action">
+            <button className="btn-primary" style={{ backgroundColor: '#f59e0b' }} onClick={() => setActiveTab('orders')}>Open Order Form</button>
+          </div>
+        </div>
+
+        {/* History: Text Right, Button Left */}
+        <div className="feature-row reverse">
+          <div className="feature-text" style={{ textAlign: 'right' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
+              <h3 style={{ margin: 0, fontSize: '2.5rem' }}>Trade History</h3>
+              <History size={48} color="#a855f7" />
+            </div>
+            <p>Review all historical trades, past order placements, and P&L executed seamlessly by the AI.</p>
+          </div>
+          <div className="feature-action">
+            <button className="btn-primary" onClick={() => setActiveTab('history')}>View History</button>
+          </div>
+        </div>
+
+        {/* Risk Manager: Text Left, Button Right */}
+        <div className="feature-row">
+          <div className="feature-text">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
+              <Shield size={48} color="var(--accent-red)" />
+              <h3 style={{ margin: 0, fontSize: '2.5rem' }}>Risk Manager</h3>
+            </div>
+            <p>Configure vital stop-loss parameters, max drawdown limits, and detailed position sizing settings.</p>
+          </div>
+          <div className="feature-action">
+            <button className="btn-primary" onClick={() => setActiveTab('risk')}>View Risk Controls</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   // ─── PROFILE TAB ────────────────────────────────────────────
   const ProfileTab = () => (
-    <div>
-      <header className="header">
-        <div>
-          <h1 style={{ fontSize: '2rem' }}>My Profile</h1>
-          <p style={{ color: 'var(--text-secondary)' }}>Zerodha Kite account details</p>
+    <div className="fade-in">
+      <div className="inner-page-topbar">
+        <button className="btn-back" onClick={() => setActiveTab('home')}>← Home</button>
+        <div className="inner-page-title">
+          <User size={22} color="var(--accent-blue)" />
+          <h2>My Profile</h2>
         </div>
-        <button
-          onClick={fetchProfile}
-          disabled={profileLoading}
-          className="btn-primary"
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: profileLoading ? 0.7 : 1 }}
-        >
-          <RefreshCw size={16} className={profileLoading ? 'spin' : ''} />
+        <button onClick={fetchProfile} disabled={profileLoading} className="btn-primary"
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: profileLoading ? 0.7 : 1 }}>
+          <RefreshCw size={14} className={profileLoading ? 'spin' : ''} />
           {profileLoading ? 'Loading...' : 'Refresh'}
         </button>
-      </header>
+      </div>
+      <div className="page-content">
 
       {profileLoading && !profile && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '300px', color: 'var(--text-secondary)' }}>
@@ -296,32 +406,25 @@ const App: React.FC = () => {
           )}
         </>
       )}
+      </div>
     </div>
   );
 
   // ─── DASHBOARD TAB ──────────────────────────────────────────
   const DashboardTab = () => (
-    <div>
-      <header className="header">
-        <div>
-          <h1 style={{ fontSize: '2rem' }}>Trading Overview</h1>
-          <p style={{ color: 'var(--text-secondary)' }}>
-            Welcome back{profile ? `, ${profile.user_shortname}` : ''}. AI Agent is currently {agentStatus}.
-          </p>
+    <div className="fade-in">
+      <div className="inner-page-topbar">
+        <button className="btn-back" onClick={() => setActiveTab('home')}>← Home</button>
+        <div className="inner-page-title">
+          <Activity size={22} color="var(--accent-green)" />
+          <h2>Trading Overview</h2>
         </div>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <button
-            onClick={toggleAgent}
-            className="btn-primary"
-            style={{
-              backgroundColor: agentStatus === 'ON' ? 'var(--accent-red)' : 'var(--accent-blue)',
-              display: 'flex', alignItems: 'center', gap: '8px'
-            }}
-          >
-            <Power size={18} /> {agentStatus === 'ON' ? 'Stop Agent' : 'Start Agent'}
-          </button>
-        </div>
-      </header>
+        <button onClick={toggleAgent} className="btn-primary"
+          style={{ backgroundColor: agentStatus === 'ON' ? 'var(--accent-red)' : 'var(--accent-blue)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Power size={16} /> {agentStatus === 'ON' ? 'Stop Agent' : 'Start Agent'}
+        </button>
+      </div>
+      <div className="page-content">
 
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginBottom: '2rem' }}>
         <div className="card glass">
@@ -379,82 +482,54 @@ const App: React.FC = () => {
           </div>
         </div>
       </section>
+      </div>  {/* close page-content */}
     </div>
   );
 
   return (
-    <div className="dashboard">
+    <div className="app-container">
       {error && (
         <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0,
+          position: 'sticky', top: 0, zIndex: 1000,
           background: 'var(--accent-red)', color: 'white',
-          padding: '8px', textAlign: 'center', zIndex: 1000, fontSize: '0.9rem'
+          padding: '8px', textAlign: 'center', fontSize: '0.9rem'
         }}>
           ⚠️ {error}
         </div>
       )}
 
-      <aside className="sidebar">
-        <div className="logo" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <TrendingUp color="var(--accent-blue)" size={32} />
-          <h2 style={{ fontSize: '1.5rem', letterSpacing: '-1px' }}>SMART TRADE</h2>
-        </div>
-
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <button className={`nav-btn ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
-            <User size={20} /> Profile
-          </button>
-          <button className={`nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
-            <Activity size={20} /> Dashboard
-          </button>
-          <button className={`nav-btn ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
-            <History size={20} /> History
-          </button>
-          <button className={`nav-btn ${activeTab === 'risk' ? 'active' : ''}`} onClick={() => setActiveTab('risk')}>
-            <Shield size={20} /> Risk Manager
-          </button>
-        </nav>
-
-        <div style={{ marginTop: 'auto' }}>
-          <div className="card glass" style={{ padding: '1rem' }}>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '8px' }}>Broker Status</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className={`status-badge ${brokerConnected ? 'status-online' : 'status-offline'}`}>
-                  {brokerConnected ? 'Connected' : 'Not Connected'}
-                </span>
-              </div>
-              {!brokerConnected && (
-                <button
-                  onClick={handleZerodhaLogin}
-                  disabled={isConnecting}
-                  className="btn-primary"
-                  style={{ fontSize: '0.75rem', padding: '6px 10px', width: '100%', justifyContent: 'center', marginTop: '4px', opacity: isConnecting ? 0.7 : 1 }}
-                >
-                  {isConnecting ? 'Initializing...' : 'Connect Kite'}
-                  {!isConnecting && <ExternalLink size={12} style={{ marginLeft: '4px' }} />}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      <main className="main-content">
+      <main className="main-content-full">
+        {activeTab === 'home' && <HomeTab />}
         {activeTab === 'dashboard' && <DashboardTab />}
         {activeTab === 'profile' && <ProfileTab />}
+        
         {activeTab === 'history' && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-secondary)', flexDirection: 'column', gap: '1rem' }}>
-            <History size={48} />
-            <h3>Trade History</h3>
-            <p>Coming soon: Full order and P&L history.</p>
+          <div className="fade-in">
+            <div className="inner-page-topbar">
+              <button className="btn-back" onClick={() => setActiveTab('home')}>← Home</button>
+              <div className="inner-page-title"><History size={22} color="#a855f7" /><h2>Trade History</h2></div>
+              <span />
+            </div>
+            <div className="page-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', gap: '1rem' }}>
+              <History size={60} color="#a855f7" />
+              <h3 style={{ fontSize: '1.8rem' }}>Trade History</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Coming soon: Full order and P&L history.</p>
+            </div>
           </div>
         )}
+        
         {activeTab === 'risk' && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-secondary)', flexDirection: 'column', gap: '1rem' }}>
-            <Shield size={48} />
-            <h3>Risk Manager</h3>
-            <p>Coming soon: Stop-loss and position sizing controls.</p>
+          <div className="fade-in">
+            <div className="inner-page-topbar">
+              <button className="btn-back" onClick={() => setActiveTab('home')}>← Home</button>
+              <div className="inner-page-title"><Shield size={22} color="var(--accent-red)" /><h2>Risk Manager</h2></div>
+              <span />
+            </div>
+            <div className="page-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', gap: '1rem' }}>
+              <Shield size={60} color="var(--accent-red)" />
+              <h3 style={{ fontSize: '1.8rem' }}>Risk Manager</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Coming soon: Stop-loss and position sizing controls.</p>
+            </div>
           </div>
         )}
       </main>

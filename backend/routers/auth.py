@@ -6,6 +6,10 @@ from ..models import User
 from ..services.broker_service import broker_service
 import os
 import logging
+from dotenv import load_dotenv
+
+# Load variables from "env" file
+load_dotenv("env")
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -16,7 +20,9 @@ async def get_login_url():
     Called by frontend to 'instruction' the backend to start the connection process.
     The backend prepares the URL and returns it.
     """
-    if not broker_service.api_key:
+    api_key = os.getenv("ZERODHA_API_KEY")
+    print(api_key)
+    if not api_key:
         raise HTTPException(
             status_code=400, 
             detail="Zerodha API Key is not configured."
@@ -25,7 +31,7 @@ async def get_login_url():
     # Initialization: Log the attempt and verify credentials
     logger.info("Initializing Zerodha connection request from frontend...")
     
-    login_url = f"https://kite.zerodha.com/connect/login?v=3&api_key={broker_service.api_key}"
+    login_url = f"https://kite.zerodha.com/connect/login?v=3&api_key={api_key}"
     return {"login_url": login_url, "status": "initialized"}
 
 @router.get("/zerodha/callback")
