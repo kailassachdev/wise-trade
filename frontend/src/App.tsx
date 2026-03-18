@@ -16,7 +16,8 @@ import {
   Hash,
   Briefcase,
   CheckCircle,
-import { ShoppingCart } from 'lucide-react';
+  ShoppingCart,
+} from 'lucide-react';
 
 type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders';
 
@@ -486,6 +487,102 @@ const App: React.FC = () => {
     </div>
   );
 
+  // ─── ORDERS TAB ─────────────────────────────────────────
+  const OrdersTab = () => {
+    const handleOrderSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setOrderLoading(true);
+      setOrderStatus(null);
+      try {
+        const payload: any = {
+          exchange: orderForm.exchange,
+          tradingsymbol: orderForm.tradingsymbol,
+          transaction_type: orderForm.transaction_type,
+          quantity: Number(orderForm.quantity),
+          product: orderForm.product,
+          order_type: orderForm.order_type,
+        };
+        if (orderForm.order_type !== 'MARKET') payload.price = Number(orderForm.price);
+        const res = await axios.post(`/api/orders/${orderForm.variety}`, payload);
+        setOrderStatus({ msg: `✅ Order placed successfully! ID: ${res.data.order_id || 'OK'}`, type: 'success' });
+      } catch (err: any) {
+        setOrderStatus({ msg: `❌ ${err.response?.data?.detail || 'Order failed. Check broker connection.'}`, type: 'error' });
+      } finally {
+        setOrderLoading(false);
+      }
+    };
+    return (
+      <div className="fade-in">
+        <div className="inner-page-topbar">
+          <button className="btn-back" onClick={() => setActiveTab('home')}>← Home</button>
+          <div className="inner-page-title"><ShoppingCart size={22} color="#f59e0b" /><h2>Place Order</h2></div>
+          <span />
+        </div>
+        <div className="page-content">
+          <div style={{ maxWidth: '620px', margin: '0 auto' }}>
+            <div className="card glass" style={{ padding: '2.5rem' }}>
+              <h3 style={{ fontSize: '1.5rem', marginBottom: '0.4rem' }}>New Order</h3>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>Submit a buy or sell order directly via Zerodha Kite.</p>
+              {orderStatus && (
+                <div style={{ padding: '0.9rem 1.2rem', borderRadius: '8px', marginBottom: '1.5rem', fontWeight: 600,
+                  background: orderStatus.type === 'success' ? 'rgba(5,150,105,0.1)' : 'rgba(220,38,38,0.08)',
+                  color: orderStatus.type === 'success' ? 'var(--accent-green)' : 'var(--accent-red)',
+                  border: `1px solid ${orderStatus.type === 'success' ? 'rgba(5,150,105,0.3)' : 'rgba(220,38,38,0.3)'}`
+                }}>{orderStatus.msg}</div>
+              )}
+              <form onSubmit={handleOrderSubmit}>
+                <div className="order-grid">
+                  {(['variety','exchange','transaction_type','order_type','product'] as const).map(key => {
+                    const options: Record<string, string[]> = {
+                      variety: ['regular','co','amo','iceberg','auction'],
+                      exchange: ['NSE','BSE','NFO','MCX','BFO','CDS'],
+                      transaction_type: ['BUY','SELL'],
+                      order_type: ['MARKET','LIMIT','SL','SL-M'],
+                      product: ['CNC','MIS','NRML','MTF'],
+                    };
+                    return (
+                      <div className="order-field" key={key}>
+                        <label className="order-label">{key.replace(/_/g,' ').toUpperCase()}</label>
+                        <select className="order-input" value={String(orderForm[key])} onChange={e => setOrderForm(f => ({ ...f, [key]: e.target.value }))}>
+                          {options[key].map(o => <option key={o}>{o}</option>)}
+                        </select>
+                      </div>
+                    );
+                  })}
+                  <div className="order-field">
+                    <label className="order-label">SYMBOL</label>
+                    <input className="order-input" placeholder="e.g. RELIANCE" value={orderForm.tradingsymbol}
+                      onChange={e => setOrderForm(f => ({ ...f, tradingsymbol: e.target.value }))} required />
+                  </div>
+                  <div className="order-field">
+                    <label className="order-label">QUANTITY</label>
+                    <input className="order-input" type="number" min={1} value={orderForm.quantity}
+                      onChange={e => setOrderForm(f => ({ ...f, quantity: Number(e.target.value) }))} required />
+                  </div>
+                  {orderForm.order_type !== 'MARKET' && (
+                    <div className="order-field">
+                      <label className="order-label">PRICE</label>
+                      <input className="order-input" type="number" step="0.05" value={orderForm.price}
+                        onChange={e => setOrderForm(f => ({ ...f, price: e.target.value }))} required />
+                    </div>
+                  )}
+                </div>
+                <button type="submit" className="btn-primary" disabled={orderLoading}
+                  style={{ width: '100%', marginTop: '2rem', padding: '1rem', fontSize: '1.05rem',
+                    backgroundColor: orderForm.transaction_type === 'BUY' ? '#f59e0b' : 'var(--accent-red)',
+                    justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px',
+                    opacity: orderLoading ? 0.7 : 1 }}>
+                  <ShoppingCart size={18} />
+                  {orderLoading ? 'Placing Order...' : `${orderForm.transaction_type} ${orderForm.tradingsymbol || '...'}`}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="app-container">
       {error && (
@@ -502,6 +599,7 @@ const App: React.FC = () => {
         {activeTab === 'home' && <HomeTab />}
         {activeTab === 'dashboard' && <DashboardTab />}
         {activeTab === 'profile' && <ProfileTab />}
+        {activeTab === 'orders' && <OrdersTab />}
         
         {activeTab === 'history' && (
           <div className="fade-in">
