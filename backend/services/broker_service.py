@@ -7,11 +7,16 @@ logger = logging.getLogger(__name__)
 
 class BrokerService:
     def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None):
-        self.api_key = api_key or os.getenv("ZERODHA_API_KEY")
-        self.api_secret = api_secret or os.getenv("ZERODHA_API_SECRET")
+        self.api_key = (api_key or os.getenv("ZERODHA_API_KEY", "")).strip()
+        self.api_secret = (api_secret or os.getenv("ZERODHA_API_SECRET", "")).strip()
         self.kite = None
         if self.api_key:
+            logger.info(f"Initializing Kite with API Key: {self.api_key[:4]}...{self.api_key[-4:] if len(self.api_key) > 4 else ''}")
+            # Increase timeout to 30 seconds for slower connections
             self.kite = KiteConnect(api_key=self.api_key)
+            self.kite.timeout = 30
+        else:
+            logger.warning("Kite API Key not found in environment variables.")
 
     def set_access_token(self, access_token: str):
         if self.kite:
@@ -65,5 +70,13 @@ class BrokerService:
             stoploss=stoploss
         )
         return order_id
+
+    def get_profile(self) -> Dict[str, Any]:
+        """
+        Get the user profile from Zerodha Kite.
+        """
+        if not self.kite:
+            raise ValueError("Kite client not initialized")
+        return self.kite.profile()
 
 broker_service = BrokerService()

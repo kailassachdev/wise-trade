@@ -1,58 +1,86 @@
-# Python
+# ─── Python ───────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.pyd
 .Python
-env/
+*.egg
+*.egg-info/
+.eggs/
+dist/
 build/
 develop-eggs/
-dist/
 downloads/
 eggs/
-.eggs/
 lib/
 lib64/
 parts/
 sdist/
 var/
 wheels/
-*.egg-info/
 .installed.cfg
-*.egg
+
+# Virtual environments
 .venv/
 venv/
 ENV/
+env/
 
-# Node/Frontend
+# ─── Secrets & Environment ────────────────────────────────────
+.env
+.env.*
+.flaskenv
+*.secret
+*.pem
+*.key
+secrets.json
+
+# ─── Database & Persistent Storage ───────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ─── Node / Frontend ──────────────────────────────────────────
 node_modules/
-dist/
-build/
+frontend/dist/
+frontend/build/
 .next/
 .serverless/
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.nuxt/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
 
-# Environment & Secrets
-.env
-.flaskenv
-*.secret
+# ─── Test & Coverage ──────────────────────────────────────────
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.log
 
-# Database
-*.db
-*.sqlite3
-
-# OS specific
+# ─── OS Specific ──────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+desktop.ini
+ehthumbs.db
 
-# IDEs
+# ─── IDEs & Editors ───────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
+*.sublime-project
+*.sublime-workspace
+
+# ─── Project Specific ─────────────────────────────────────────
+# Zerodha tokens / access keys should NEVER be committed
+*access_token*
+*kite_token*
+
+# Local batch overrides / personal scripts
+run_local*.bat
+local_*.bat
