@@ -38,6 +38,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [agentStatus, setAgentStatus] = useState<'ON' | 'OFF'>('OFF');
   const [portfolio, setPortfolio] = useState<any>({ margins: {}, positions: [], holdings: [] });
+  const [brokerConnected, setBrokerConnected] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -83,13 +84,18 @@ const App: React.FC = () => {
     try {
       const res = await axios.get('/api/portfolio/');
       if (res.data.error) {
-        console.warn("Portfolio Fetch Error:", res.data.error);
+        // Broker not authenticated — store error so sidebar reflects 'Not Connected'
+        console.warn("Broker not connected:", res.data.error);
+        setPortfolio({ margins: {}, positions: [], holdings: [], error: res.data.error });
+        setBrokerConnected(false);
       } else {
         setPortfolio(res.data);
+        setBrokerConnected(true);
       }
       setLoading(false);
     } catch (e: any) {
       console.error(e);
+      setBrokerConnected(false);
       setLoading(false);
     }
   };
@@ -131,8 +137,13 @@ const App: React.FC = () => {
   const handleZerodhaLogin = async () => {
     setIsConnecting(true);
     try {
+      // Step 1: Ask backend to generate the dynamic login URL using API key from .env
       const res = await axios.get('http://localhost:8000/api/auth/zerodha/login');
+      
+      // Step 2: Backend returns: { login_url: "https://kite.zerodha.com/connect/login?v=3&api_key=...", status: "initialized" }
       if (res.data.login_url) {
+        console.log("Redirecting to Zerodha login:", res.data.login_url);
+        // Step 3: Open Zerodha login in the same tab
         window.location.href = res.data.login_url;
       }
     } catch (e: any) {
@@ -409,11 +420,11 @@ const App: React.FC = () => {
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '8px' }}>Broker Status</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className={`status-badge ${portfolio.error ? 'status-offline' : 'status-online'}`}>
-                  {portfolio.error ? 'Disconnected' : 'Connected'}
+                <span className={`status-badge ${brokerConnected ? 'status-online' : 'status-offline'}`}>
+                  {brokerConnected ? 'Connected' : 'Not Connected'}
                 </span>
               </div>
-              {portfolio.error && (
+              {!brokerConnected && (
                 <button
                   onClick={handleZerodhaLogin}
                   disabled={isConnecting}
