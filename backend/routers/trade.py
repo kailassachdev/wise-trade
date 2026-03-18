@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 class OrderRequest(BaseModel):
+    variety: str = "regular"
     exchange: str = "NSE"
     symbol: str
     transaction_type: str # BUY or SELL
@@ -18,6 +19,9 @@ class OrderRequest(BaseModel):
     product: str = "CNC" # CNC for delivery, MIS for intraday
     order_type: str = "MARKET"
     price: Optional[float] = None
+    trigger_price: Optional[float] = None
+    disclosed_quantity: Optional[int] = None
+    validity: str = "DAY"
 
 @router.post("/execute")
 async def execute_trade(order: OrderRequest, session: Session = Depends(get_session)):
@@ -37,14 +41,17 @@ async def execute_trade(order: OrderRequest, session: Session = Depends(get_sess
         logger.info(f"Executing {order.transaction_type} order for {order.symbol} x {order.quantity}")
         
         order_id = broker_service.place_order(
-            variety="regular",
+            variety=order.variety,
             exchange=order.exchange,
             tradingsymbol=order.symbol,
             transaction_type=order.transaction_type,
             quantity=order.quantity,
             product=order.product,
             order_type=order.order_type,
-            price=order.price
+            price=order.price,
+            trigger_price=order.trigger_price,
+            disclosed_quantity=order.disclosed_quantity,
+            validity=order.validity
         )
 
         # 4. Save trade to local history for AI learning
