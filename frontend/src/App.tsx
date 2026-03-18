@@ -237,16 +237,10 @@ const App: React.FC = () => {
     return () => clearTimeout(timeout);
   }, [searchQuery]);
 
-  // Start/stop polling based on broker connection
+  // Start/stop polling for Yahoo Finance Market Data regardless of broker connection
   useEffect(() => {
-    if (brokerConnected) {
-      fetchWatchlist(); // immediate first load
-      pollIntervalRef.current = setInterval(fetchWatchlist, 3000);
-    } else {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-      setWatchlist([]);
-      setPollStatus('idle');
-    }
+    fetchWatchlist(); // immediate first load
+    pollIntervalRef.current = setInterval(fetchWatchlist, 3000);
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
@@ -635,12 +629,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Watchlist Table */}
-        {!brokerConnected ? (
-          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
-            <WifiOff size={32} style={{ margin: '0 auto 0.75rem' }} />
-            <p>Connect Zerodha broker to see live prices.</p>
-          </div>
-        ) : watchlist.length === 0 ? (
+        {watchlist.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
             <RefreshCw size={24} className="spin" style={{ margin: '0 auto 0.75rem' }} />
             <p>Connecting to market feed...</p>

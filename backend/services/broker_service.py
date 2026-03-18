@@ -84,10 +84,30 @@ class BrokerService:
 
     def get_profile(self) -> Dict[str, Any]:
         """
-        Get the user profile from Zerodha Kite.
+        Get the user profile from Zerodha Kite explicitly bypassing the SDK to enforce custom headers.
         """
-        if not self.kite:
-            raise ValueError("Kite client not initialized")
-        return self.kite.profile()
+        if not self.kite or not self.kite.access_token:
+            raise ValueError("Kite client or access token not initialized")
+            
+        import httpx
+        url = "https://api.kite.trade/user/profile"
+        headers = {
+            "X-Kite-Version": "3",
+            "Authorization": f"token {self.api_key}:{self.kite.access_token}"
+        }
+        
+        logger.info(f"Fetching profile with headers: {headers}")
+        
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(url, headers=headers)
+            
+            if response.status_code != 200:
+                logger.error(f"Profile API Error: {response.text}")
+                response.raise_for_status()
+                
+            data = response.json()
+            if data.get("status") == "success":
+                return data.get("data", {})
+            return data
 
 broker_service = BrokerService()

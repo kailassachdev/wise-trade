@@ -22,11 +22,8 @@ class OrderRequest(BaseModel):
     trigger_price: Optional[float] = None
     disclosed_quantity: Optional[int] = None
     validity: str = "DAY"
-<<<<<<< HEAD
     source: str = "manual"  # Origin: manual, technical_agent, news_agent, social_agent
     reason: str = "Manual trade"  # Why this trade was triggered
-=======
->>>>>>> ba32ca81b51f3277c55af0da8838d144937cebe5
 
 @router.post("/execute")
 async def execute_trade(order: OrderRequest, session: Session = Depends(get_session)):
