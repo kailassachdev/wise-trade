@@ -528,37 +528,73 @@ const App: React.FC = () => {
   );
 
   // ─── DASHBOARD TAB ──────────────────────────────────────────
-  const DashboardTab = () => (
-    <div className="fade-in">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border)' }}>
-        <div>
-          <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Trading Overview</h2>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Welcome back{profile ? `, ${profile.user_shortname}` : ''}. AI Agent is currently {agentStatus}.</p>
-        </div>
-        <button onClick={toggleAgent} className="btn-primary"
-          style={{ backgroundColor: agentStatus === 'ON' ? 'var(--accent-red)' : 'var(--accent-blue)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Power size={16} /> {agentStatus === 'ON' ? 'Stop Agent' : 'Start Agent'}
-        </button>
-      </div>
+  const DashboardTab = () => {
+    // Calculate PnL from positions if available. 
+    // Zerodha API returns {"net": [...], "day": [...]}.
+    const positionsData = portfolio.positions || [];
+    const positions = Array.isArray(positionsData) ? positionsData : (positionsData.net || []);
+    const totalM2M = positions.reduce((acc: number, p: any) => acc + (p.m2m || 0), 0);
+    const m2mColor = totalM2M >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+    const m2mSign = totalM2M >= 0 ? '+' : '';
 
-      {/* Stats row */}
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginBottom: '1.5rem' }}>
-        <div className="card glass">
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Net Worth</p>
-          <h2 style={{ fontSize: '1.8rem', margin: '8px 0' }}>₹ {portfolio.margins?.equity?.net?.toLocaleString() || '0'}</h2>
-          <p style={{ color: 'var(--accent-green)', fontSize: '0.85rem' }}>+2.4% (Today)</p>
+    // Advanced Margin Parsing
+    const eq = portfolio.margins?.equity || {};
+    const net = eq.net || 0;
+    const avail = eq.available?.live_balance || eq.available?.cash || 0;
+    const collateral = eq.available?.collateral || 0;
+    
+    // Total utilized can be calculated from debits or span+exposure. Let's use debits
+    const utilised = eq.utilised?.debits || 0;
+    const delivery = eq.utilised?.delivery || 0;
+    
+    // For net worth trend, we use M2M as a proxy for today's change on net
+    const trendPct = net > 0 ? (totalM2M / net) * 100 : 0;
+    const trendColor = trendPct >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+    const trendSign = trendPct >= 0 ? '+' : '';
+
+    return (
+      <div className="fade-in">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border)' }}>
+          <div>
+            <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Trading Overview</h2>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Welcome back{profile ? `, ${profile.user_shortname}` : ''}. AI Agent is currently {agentStatus}.</p>
+          </div>
+          <button onClick={toggleAgent} className="btn-primary"
+            style={{ backgroundColor: agentStatus === 'ON' ? 'var(--accent-red)' : 'var(--accent-blue)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Power size={16} /> {agentStatus === 'ON' ? 'Stop Agent' : 'Start Agent'}
+          </button>
         </div>
-        <div className="card glass">
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Available Cash</p>
-          <h2 style={{ fontSize: '1.8rem', margin: '8px 0' }}>₹ {portfolio.margins?.equity?.available?.cash?.toLocaleString() || '0'}</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Utilized: ₹0</p>
-        </div>
-        <div className="card glass">
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Active Positions</p>
-          <h2 style={{ fontSize: '1.8rem', margin: '8px 0' }}>{portfolio.positions?.length || 0}</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>PnL: ₹0</p>
-        </div>
-      </section>
+
+        {/* Dynamic Margin Stats Row */}
+        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '1.5rem' }}>
+          <div className="card glass">
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Account Value (Net)</p>
+            <h2 style={{ fontSize: '1.8rem', margin: '8px 0' }}>₹{net.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h2>
+            <p style={{ color: trendColor, fontSize: '0.85rem', fontWeight: 600 }}>{trendSign}{trendPct.toFixed(2)}% PnL (Today)</p>
+          </div>
+          
+          <div className="card glass">
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Available Margin</p>
+            <h2 style={{ fontSize: '1.8rem', margin: '8px 0', color: 'var(--accent-blue)' }}>₹{avail.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Collateral: ₹{collateral.toLocaleString('en-IN')}</p>
+          </div>
+          
+          <div className="card glass">
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Margin Utilized</p>
+            <h2 style={{ fontSize: '1.8rem', margin: '8px 0', color: utilised > 0 ? 'var(--accent-red)' : 'var(--text-primary)' }}>
+              ₹{Math.abs(utilised).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Delivery: ₹{Math.abs(delivery).toLocaleString('en-IN')}</p>
+          </div>
+          
+          <div className="card glass">
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Positions M2M</p>
+            <h2 style={{ fontSize: '1.8rem', margin: '8px 0', color: m2mColor }}>
+              {m2mSign}₹{Math.abs(totalM2M).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{positions.length} Active Positions</p>
+          </div>
+        </section>
 
       {/* Live Watchlist */}
       <div className="card glass" style={{ marginBottom: '1.5rem', overflow: 'hidden' }}>
@@ -634,7 +670,7 @@ const App: React.FC = () => {
               <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
                 <p>No valid Indian stocks found for "{searchQuery}"</p>
               </div>
-            ) : (searchQuery.length >= 2 ? searchResults : watchlist).map((tick: any) => {
+            ) : (searchQuery.length >= 2 ? searchResults : watchlist.filter(t => t.symbol.toLowerCase().includes(searchQuery.toLowerCase()))).map((tick: any) => {
               const isUp = tick.change_pct >= 0;
               const flash = flashMap[tick.symbol];
               const isSearchMode = searchQuery.length >= 2;
@@ -717,6 +753,7 @@ const App: React.FC = () => {
       </div>
     </div>
   );
+};
 
   // ─── ORDERS TAB ─────────────────────────────────────────
   const OrdersTab = () => {
