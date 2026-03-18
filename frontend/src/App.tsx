@@ -21,6 +21,7 @@ import {
   WifiOff,
   ArrowUpRight,
   ArrowDownRight,
+  Search,
 } from 'lucide-react';
 
 type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders';
@@ -67,6 +68,9 @@ const App: React.FC = () => {
   const prevPricesRef = useRef<Record<string, number>>({});
   const [flashMap, setFlashMap] = useState<Record<string, 'up' | 'down'>>({});
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   const [orderForm, setOrderForm] = useState({
     variety: 'regular',
@@ -77,6 +81,9 @@ const App: React.FC = () => {
     product: 'CNC',
     order_type: 'MARKET',
     price: '',
+    trigger_price: '',
+    disclosed_quantity: '',
+    validity: 'DAY',
   });
   const [orderStatus, setOrderStatus] = useState<{msg: string; type: 'success'|'error'} | null>(null);
   const [orderLoading, setOrderLoading] = useState(false);
@@ -206,6 +213,28 @@ const App: React.FC = () => {
     }
   };
 
+  // ── Smart Global Stock Search (debounced) ───────────────────────────────────
+  useEffect(() => {
+    if (searchQuery.length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+    setIsSearching(true);
+    const timeout = setTimeout(async () => {
+      try {
+        const res = await axios.get(`http://localhost:8000/api/market/search?q=${searchQuery}`);
+        if (res.data.status === 'success') {
+          setSearchResults(res.data.results);
+        }
+      } catch (e) {
+        console.error("Search failed", e);
+      }
+      setIsSearching(false);
+    }, 600); // 600ms typing debounce
+    return () => clearTimeout(timeout);
+  }, [searchQuery]);
+
   // Start/stop polling based on broker connection
   useEffect(() => {
     if (brokerConnected) {
@@ -238,6 +267,21 @@ const App: React.FC = () => {
       alert(errorMsg);
       setIsConnecting(false);
     }
+  };
+
+  const handleWatchlistTrade = (symbol: string, transaction_type: 'BUY' | 'SELL', price: number) => {
+    setOrderForm(prev => ({
+      ...prev,
+      variety: 'amo',
+      exchange: 'NSE',
+      product: 'CNC',
+      tradingsymbol: symbol,
+      transaction_type,
+      // Provide a safe LIMIT price (e.g., 0.5% below for BUY to guarantee Zerodha AMO validation)
+      price: String((transaction_type === 'BUY' ? price * 0.995 : price * 1.005).toFixed(2)),
+      order_type: 'LIMIT'
+    }));
+    setActiveTab('orders');
   };
 
   // ─── HOME DIRECTORY TAB ────────────────────────────────────
@@ -522,15 +566,28 @@ const App: React.FC = () => {
             <h3 style={{ margin: 0 }}>Live Watchlist</h3>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {/* Poll status indicator */}
+            {/* Poll status indicator and Search */}
             <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem',
               color: pollStatus === 'polling' ? 'var(--accent-green)' : pollStatus === 'error' ? 'var(--accent-red)' : 'var(--text-secondary)',
               fontWeight: 600 }}>
               {pollStatus === 'polling' ? <Wifi size={13} /> : pollStatus === 'error' ? <WifiOff size={13} /> : <RefreshCw size={13} />}
               {pollStatus === 'polling' ? 'LIVE · 3s' : pollStatus === 'error' ? 'Error' : 'Waiting...'}
             </span>
+            <div style={{ position: 'relative', marginLeft: '10px' }}>
+              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+              <input 
+                type="text" 
+                placeholder="Search stocks..." 
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{
+                  padding: '6px 12px 6px 30px', borderRadius: '20px', fontSize: '0.85rem', width: '200px',
+                  border: '1px solid var(--border)', background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)'
+                }}
+              />
+            </div>
             {pollStatus === 'error' && brokerConnected && (
-              <button onClick={fetchWatchlist} style={{ background: 'var(--accent-blue)', color: 'white', padding: '4px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600 }}>
+              <button onClick={fetchWatchlist} style={{ background: 'var(--accent-blue)', color: 'white', padding: '4px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600, marginLeft: '6px' }}>
                 Retry
               </button>
             )}
@@ -550,39 +607,75 @@ const App: React.FC = () => {
           </div>
         ) : (
           <div className="watchlist-table">
-            <div className="watchlist-header">
-              <span>Symbol</span>
+            <div className="watchlist-header" style={{ gridTemplateColumns: searchQuery.length >= 2 ? '3fr 1.5fr 1fr 1.5fr' : '1.8fr 1.2fr 1fr 1fr 1fr 1fr 1.5fr' }}>
+              <span>{searchQuery.length >= 2 ? 'Company Name & Symbol' : 'Symbol'}</span>
               <span style={{ textAlign: 'right' }}>LTP (₹)</span>
               <span style={{ textAlign: 'right' }}>Change</span>
-              <span style={{ textAlign: 'right' }}>Open</span>
-              <span style={{ textAlign: 'right' }}>High</span>
-              <span style={{ textAlign: 'right' }}>Low</span>
+              {searchQuery.length < 2 && (
+                <>
+                  <span style={{ textAlign: 'right' }}>Open</span>
+                  <span style={{ textAlign: 'right' }}>High</span>
+                  <span style={{ textAlign: 'right' }}>Low</span>
+                </>
+              )}
+              <span style={{ textAlign: 'right' }}>Trade</span>
             </div>
-            {watchlist.map(tick => {
+            
+            {isSearching ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                <RefreshCw className="spin" size={20} style={{ margin: '0 auto 0.5rem' }} />
+                <p>Searching Yahoo Finance...</p>
+              </div>
+            ) : searchQuery.length >= 2 && searchResults.length === 0 ? (
+               <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                <p>No valid Indian stocks found for "{searchQuery}"</p>
+              </div>
+            ) : (searchQuery.length >= 2 ? searchResults : watchlist).map((tick: any) => {
               const isUp = tick.change_pct >= 0;
               const flash = flashMap[tick.symbol];
+              const isSearchMode = searchQuery.length >= 2;
+              
               return (
-                <div key={tick.symbol} className={`watchlist-row ${flash ? `flash-${flash}` : ''}`}>
+                <div key={tick.symbol} className={`watchlist-row ${flash ? `flash-${flash}` : ''}`}
+                     style={{ gridTemplateColumns: isSearchMode ? '3fr 1.5fr 1fr 1.5fr' : '1.8fr 1.2fr 1fr 1fr 1fr 1fr 1.5fr' }}>
                   <div className="watchlist-symbol">
-                    <span className="symbol-name">{tick.symbol}</span>
-                    <span className="symbol-exchange">{tick.exchange || 'NSE'}</span>
+                    <span className="symbol-name">{isSearchMode ? tick.name : tick.symbol}</span>
+                    <span className="symbol-exchange">{tick.symbol} • {tick.exchange || 'NSE'}</span>
                   </div>
                   <div style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                    {tick.last_price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {tick.last_price > 0 
+                      ? tick.last_price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
+                      : 'N/A'}
                   </div>
                   <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px',
                     color: isUp ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 600, fontSize: '0.9rem' }}>
-                    {isUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                    {tick.change_pct.toFixed(2)}%
+                    {tick.last_price > 0 && (isUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />)}
+                    {tick.last_price > 0 ? `${tick.change_pct.toFixed(2)}%` : '—'}
                   </div>
-                  <div style={{ textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
-                    {tick.ohlc?.open?.toFixed(2) ?? '—'}
-                  </div>
-                  <div style={{ textAlign: 'right', color: 'var(--accent-green)', fontSize: '0.88rem' }}>
-                    {tick.ohlc?.high?.toFixed(2) ?? '—'}
-                  </div>
-                  <div style={{ textAlign: 'right', color: 'var(--accent-red)', fontSize: '0.88rem' }}>
-                    {tick.ohlc?.low?.toFixed(2) ?? '—'}
+                  
+                  {!isSearchMode && (
+                    <>
+                      <div style={{ textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
+                        {tick.ohlc?.open?.toFixed(2) ?? '—'}
+                      </div>
+                      <div style={{ textAlign: 'right', color: 'var(--accent-green)', fontSize: '0.88rem' }}>
+                        {tick.ohlc?.high?.toFixed(2) ?? '—'}
+                      </div>
+                      <div style={{ textAlign: 'right', color: 'var(--accent-red)', fontSize: '0.88rem' }}>
+                        {tick.ohlc?.low?.toFixed(2) ?? '—'}
+                      </div>
+                    </>
+                  )}
+                  
+                  <div style={{ textAlign: 'right', display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                    {tick.last_price > 0 ? (
+                      <>
+                        <button className="btn-trade-small btn-buy" onClick={() => handleWatchlistTrade(tick.symbol, 'BUY', tick.last_price)}>BUY</button>
+                        <button className="btn-trade-small btn-sell" onClick={() => handleWatchlistTrade(tick.symbol, 'SELL', tick.last_price)}>SELL</button>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Off-hours/Unavailable</span>
+                    )}
                   </div>
                 </div>
               );
@@ -627,18 +720,25 @@ const App: React.FC = () => {
       setOrderStatus(null);
       try {
         const payload: any = {
+          variety: orderForm.variety,
           exchange: orderForm.exchange,
-          tradingsymbol: orderForm.tradingsymbol,
+          symbol: orderForm.tradingsymbol, // Backend expects 'symbol'
           transaction_type: orderForm.transaction_type,
           quantity: Number(orderForm.quantity),
           product: orderForm.product,
           order_type: orderForm.order_type,
+          validity: orderForm.validity,
         };
         if (orderForm.order_type !== 'MARKET') payload.price = Number(orderForm.price);
-        const res = await axios.post(`/api/orders/${orderForm.variety}`, payload);
-        setOrderStatus({ msg: `✅ Order placed successfully! ID: ${res.data.order_id || 'OK'}`, type: 'success' });
+        if (orderForm.order_type === 'SL' || orderForm.order_type === 'SL-M') payload.trigger_price = Number(orderForm.trigger_price);
+        if (orderForm.disclosed_quantity) payload.disclosed_quantity = Number(orderForm.disclosed_quantity);
+        
+        // Execute trade to backend route
+        const res = await axios.post(`/api/trade/execute`, payload);
+        
+        setOrderStatus({ msg: `✅ ${res.data.message} | Order ID: ${res.data.order_id || 'OK'}`, type: 'success' });
       } catch (err: any) {
-        setOrderStatus({ msg: `❌ ${err.response?.data?.detail || 'Order failed. Check broker connection.'}`, type: 'error' });
+        setOrderStatus({ msg: `❌ ${err.response?.data?.detail || 'Order failed. Check backend logs.'}`, type: 'error' });
       } finally {
         setOrderLoading(false);
       }
@@ -664,13 +764,14 @@ const App: React.FC = () => {
               )}
               <form onSubmit={handleOrderSubmit}>
                 <div className="order-grid">
-                  {(['variety','exchange','transaction_type','order_type','product'] as const).map(key => {
+                  {(['variety','exchange','transaction_type','order_type','product','validity'] as const).map(key => {
                     const options: Record<string, string[]> = {
                       variety: ['regular','co','amo','iceberg','auction'],
                       exchange: ['NSE','BSE','NFO','MCX','BFO','CDS'],
                       transaction_type: ['BUY','SELL'],
                       order_type: ['MARKET','LIMIT','SL','SL-M'],
                       product: ['CNC','MIS','NRML','MTF'],
+                      validity: ['DAY','IOC','TTL'],
                     };
                     return (
                       <div className="order-field" key={key}>
@@ -698,6 +799,18 @@ const App: React.FC = () => {
                         onChange={e => setOrderForm(f => ({ ...f, price: e.target.value }))} required />
                     </div>
                   )}
+                  {(orderForm.order_type === 'SL' || orderForm.order_type === 'SL-M') && (
+                    <div className="order-field">
+                      <label className="order-label">TRIGGER PRICE</label>
+                      <input className="order-input" type="number" step="0.05" value={orderForm.trigger_price}
+                        onChange={e => setOrderForm(f => ({ ...f, trigger_price: e.target.value }))} required />
+                    </div>
+                  )}
+                  <div className="order-field">
+                    <label className="order-label">DISCLOSED QUANTITY</label>
+                    <input className="order-input" type="number" min={0} value={orderForm.disclosed_quantity} placeholder="Optional"
+                      onChange={e => setOrderForm(f => ({ ...f, disclosed_quantity: e.target.value }))} />
+                  </div>
                 </div>
                 <button type="submit" className="btn-primary" disabled={orderLoading}
                   style={{ width: '100%', marginTop: '2rem', padding: '1rem', fontSize: '1.05rem',
