@@ -26,7 +26,7 @@ import {
   Package,
 } from 'lucide-react';
 
-type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders' | 'holdings';
+type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders' | 'holdings' | 'place_order';
 
 interface KiteProfile {
   user_id: string;
@@ -89,6 +89,21 @@ const App: React.FC = () => {
   });
   const [orderStatus, setOrderStatus] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [orderLoading, setOrderLoading] = useState(false);
+
+  // Orders History State
+  const [historyOrders, setHistoryOrders] = useState<any[]>([]);
+  const [histLoading, setHistLoading] = useState(false);
+  const [histFilter, setHistFilter] = useState<string>('ALL');
+
+  useEffect(() => {
+    if (activeTab === 'orders' && brokerConnected) {
+      setHistLoading(true);
+      axios.get('/api/trade/orders')
+        .then(r => setHistoryOrders(r.data.orders || []))
+        .catch(() => setHistoryOrders([]))
+        .finally(() => setHistLoading(false));
+    }
+  }, [activeTab, brokerConnected]);
 
   useEffect(() => {
     // Check for auth status in URL
@@ -536,11 +551,11 @@ const App: React.FC = () => {
     const net = eq.net || 0;
     const avail = eq.available?.live_balance || eq.available?.cash || 0;
     const collateral = eq.available?.collateral || 0;
-    
+
     // Total utilized can be calculated from debits or span+exposure. Let's use debits
     const utilised = eq.utilised?.debits || 0;
     const delivery = eq.utilised?.delivery || 0;
-    
+
     // For net worth trend, we use M2M as a proxy for today's change on net
     const trendPct = net > 0 ? (totalM2M / net) * 100 : 0;
     const trendColor = trendPct >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
@@ -566,13 +581,13 @@ const App: React.FC = () => {
             <h2 style={{ fontSize: '1.8rem', margin: '8px 0' }}>₹{net.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h2>
             <p style={{ color: trendColor, fontSize: '0.85rem', fontWeight: 600 }}>{trendSign}{trendPct.toFixed(2)}% PnL (Today)</p>
           </div>
-          
+
           <div className="card glass">
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Available Margin</p>
             <h2 style={{ fontSize: '1.8rem', margin: '8px 0', color: 'var(--accent-blue)' }}>₹{avail.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Collateral: ₹{collateral.toLocaleString('en-IN')}</p>
           </div>
-          
+
           <div className="card glass">
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Margin Utilized</p>
             <h2 style={{ fontSize: '1.8rem', margin: '8px 0', color: utilised > 0 ? 'var(--accent-red)' : 'var(--text-primary)' }}>
@@ -580,7 +595,7 @@ const App: React.FC = () => {
             </h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Delivery: ₹{Math.abs(delivery).toLocaleString('en-IN')}</p>
           </div>
-          
+
           <div className="card glass">
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Positions M2M</p>
             <h2 style={{ fontSize: '1.8rem', margin: '8px 0', color: m2mColor }}>
@@ -590,159 +605,159 @@ const App: React.FC = () => {
           </div>
         </section>
 
-      {/* Live Watchlist */}
-      <div className="card glass" style={{ marginBottom: '1.5rem', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <BarChart3 size={20} color="var(--accent-blue)" />
-            <h3 style={{ margin: 0 }}>Live Watchlist</h3>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {/* Poll status indicator and Search */}
-            <span style={{
-              display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem',
-              color: pollStatus === 'polling' ? 'var(--accent-green)' : pollStatus === 'error' ? 'var(--accent-red)' : 'var(--text-secondary)',
-              fontWeight: 600
-            }}>
-              {pollStatus === 'polling' ? <Wifi size={13} /> : pollStatus === 'error' ? <WifiOff size={13} /> : <RefreshCw size={13} />}
-              {pollStatus === 'polling' ? 'LIVE · 3s' : pollStatus === 'error' ? 'Error' : 'Waiting...'}
-            </span>
-            <div style={{ position: 'relative', marginLeft: '10px' }}>
-              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
-              <input
-                type="text"
-                placeholder="Search stocks..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                style={{
-                  padding: '6px 12px 6px 30px', borderRadius: '20px', fontSize: '0.85rem', width: '200px',
-                  border: '1px solid var(--border)', background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)'
-                }}
-              />
+        {/* Live Watchlist */}
+        <div className="card glass" style={{ marginBottom: '1.5rem', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <BarChart3 size={20} color="var(--accent-blue)" />
+              <h3 style={{ margin: 0 }}>Live Watchlist</h3>
             </div>
-            {pollStatus === 'error' && brokerConnected && (
-              <button onClick={fetchWatchlist} style={{ background: 'var(--accent-blue)', color: 'white', padding: '4px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600, marginLeft: '6px' }}>
-                Retry
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Watchlist Table */}
-        {watchlist.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
-            <RefreshCw size={24} className="spin" style={{ margin: '0 auto 0.75rem' }} />
-            <p>Connecting to market feed...</p>
-          </div>
-        ) : (
-          <div className="watchlist-table">
-            <div className="watchlist-header" style={{ gridTemplateColumns: searchQuery.length >= 2 ? '3fr 1.5fr 1fr 1.5fr' : '1.8fr 1.2fr 1fr 1fr 1fr 1fr 1.5fr' }}>
-              <span>{searchQuery.length >= 2 ? 'Company Name & Symbol' : 'Symbol'}</span>
-              <span style={{ textAlign: 'right' }}>LTP (₹)</span>
-              <span style={{ textAlign: 'right' }}>Change</span>
-              {searchQuery.length < 2 && (
-                <>
-                  <span style={{ textAlign: 'right' }}>Open</span>
-                  <span style={{ textAlign: 'right' }}>High</span>
-                  <span style={{ textAlign: 'right' }}>Low</span>
-                </>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {/* Poll status indicator and Search */}
+              <span style={{
+                display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem',
+                color: pollStatus === 'polling' ? 'var(--accent-green)' : pollStatus === 'error' ? 'var(--accent-red)' : 'var(--text-secondary)',
+                fontWeight: 600
+              }}>
+                {pollStatus === 'polling' ? <Wifi size={13} /> : pollStatus === 'error' ? <WifiOff size={13} /> : <RefreshCw size={13} />}
+                {pollStatus === 'polling' ? 'LIVE · 3s' : pollStatus === 'error' ? 'Error' : 'Waiting...'}
+              </span>
+              <div style={{ position: 'relative', marginLeft: '10px' }}>
+                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+                <input
+                  type="text"
+                  placeholder="Search stocks..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  style={{
+                    padding: '6px 12px 6px 30px', borderRadius: '20px', fontSize: '0.85rem', width: '200px',
+                    border: '1px solid var(--border)', background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)'
+                  }}
+                />
+              </div>
+              {pollStatus === 'error' && brokerConnected && (
+                <button onClick={fetchWatchlist} style={{ background: 'var(--accent-blue)', color: 'white', padding: '4px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600, marginLeft: '6px' }}>
+                  Retry
+                </button>
               )}
-              <span style={{ textAlign: 'right' }}>Trade</span>
             </div>
+          </div>
 
-            {isSearching ? (
-              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                <RefreshCw className="spin" size={20} style={{ margin: '0 auto 0.5rem' }} />
-                <p>Searching Yahoo Finance...</p>
+          {/* Watchlist Table */}
+          {watchlist.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+              <RefreshCw size={24} className="spin" style={{ margin: '0 auto 0.75rem' }} />
+              <p>Connecting to market feed...</p>
+            </div>
+          ) : (
+            <div className="watchlist-table">
+              <div className="watchlist-header" style={{ gridTemplateColumns: searchQuery.length >= 2 ? '3fr 1.5fr 1fr 1.5fr' : '1.8fr 1.2fr 1fr 1fr 1fr 1fr 1.5fr' }}>
+                <span>{searchQuery.length >= 2 ? 'Company Name & Symbol' : 'Symbol'}</span>
+                <span style={{ textAlign: 'right' }}>LTP (₹)</span>
+                <span style={{ textAlign: 'right' }}>Change</span>
+                {searchQuery.length < 2 && (
+                  <>
+                    <span style={{ textAlign: 'right' }}>Open</span>
+                    <span style={{ textAlign: 'right' }}>High</span>
+                    <span style={{ textAlign: 'right' }}>Low</span>
+                  </>
+                )}
+                <span style={{ textAlign: 'right' }}>Trade</span>
               </div>
-            ) : searchQuery.length >= 2 && searchResults.length === 0 ? (
-              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                <p>No valid Indian stocks found for "{searchQuery}"</p>
-              </div>
-            ) : (searchQuery.length >= 2 ? searchResults : watchlist.filter(t => t.symbol.toLowerCase().includes(searchQuery.toLowerCase()))).map((tick: any) => {
-              const isUp = tick.change_pct >= 0;
-              const flash = flashMap[tick.symbol];
-              const isSearchMode = searchQuery.length >= 2;
 
-              return (
-                <div key={tick.symbol} className={`watchlist-row ${flash ? `flash-${flash}` : ''}`}
-                  style={{ gridTemplateColumns: isSearchMode ? '3fr 1.5fr 1fr 1.5fr' : '1.8fr 1.2fr 1fr 1fr 1fr 1fr 1.5fr' }}>
-                  <div className="watchlist-symbol">
-                    <span className="symbol-name">{isSearchMode ? tick.name : tick.symbol}</span>
-                    <span className="symbol-exchange">{tick.symbol} • {tick.exchange || 'NSE'}</span>
-                  </div>
-                  <div style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                    {tick.last_price > 0
-                      ? tick.last_price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                      : 'N/A'}
-                  </div>
-                  <div style={{
-                    textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px',
-                    color: isUp ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 600, fontSize: '0.9rem'
-                  }}>
-                    {tick.last_price > 0 && (isUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />)}
-                    {tick.last_price > 0 ? `${tick.change_pct.toFixed(2)}%` : '—'}
-                  </div>
-
-                  {!isSearchMode && (
-                    <>
-                      <div style={{ textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
-                        {tick.ohlc?.open?.toFixed(2) ?? '—'}
-                      </div>
-                      <div style={{ textAlign: 'right', color: 'var(--accent-green)', fontSize: '0.88rem' }}>
-                        {tick.ohlc?.high?.toFixed(2) ?? '—'}
-                      </div>
-                      <div style={{ textAlign: 'right', color: 'var(--accent-red)', fontSize: '0.88rem' }}>
-                        {tick.ohlc?.low?.toFixed(2) ?? '—'}
-                      </div>
-                    </>
-                  )}
-
-                  <div style={{ textAlign: 'right', display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                    {tick.last_price > 0 ? (
-                      <>
-                        <button className="btn-trade-small btn-buy" onClick={() => handleWatchlistTrade(tick.symbol, 'BUY', tick.last_price)}>BUY</button>
-                        <button className="btn-trade-small btn-sell" onClick={() => handleWatchlistTrade(tick.symbol, 'SELL', tick.last_price)}>SELL</button>
-                      </>
-                    ) : (
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Off-hours/Unavailable</span>
-                    )}
-                  </div>
+              {isSearching ? (
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  <RefreshCw className="spin" size={20} style={{ margin: '0 auto 0.5rem' }} />
+                  <p>Searching Yahoo Finance...</p>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+              ) : searchQuery.length >= 2 && searchResults.length === 0 ? (
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  <p>No valid Indian stocks found for "{searchQuery}"</p>
+                </div>
+              ) : (searchQuery.length >= 2 ? searchResults : watchlist.filter(t => t.symbol.toLowerCase().includes(searchQuery.toLowerCase()))).map((tick: any) => {
+                const isUp = tick.change_pct >= 0;
+                const flash = flashMap[tick.symbol];
+                const isSearchMode = searchQuery.length >= 2;
 
-      {/* AI Engine */}
-      <div className="card glass">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem' }}>
-          <Cpu size={20} color="var(--accent-blue)" />
-          <h3>AI Reasoning Engine</h3>
+                return (
+                  <div key={`${tick.symbol}-${tick.exchange}`} className={`watchlist-row ${flash ? `flash-${flash}` : ''}`}
+                    style={{ gridTemplateColumns: isSearchMode ? '3fr 1.5fr 1fr 1.5fr' : '1.8fr 1.2fr 1fr 1fr 1fr 1fr 1.5fr' }}>
+                    <div className="watchlist-symbol">
+                      <span className="symbol-name">{isSearchMode ? tick.name : tick.symbol}</span>
+                      <span className="symbol-exchange">{tick.symbol} • {tick.exchange || 'NSE'}</span>
+                    </div>
+                    <div style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                      {tick.last_price > 0
+                        ? tick.last_price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        : 'N/A'}
+                    </div>
+                    <div style={{
+                      textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px',
+                      color: isUp ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 600, fontSize: '0.9rem'
+                    }}>
+                      {tick.last_price > 0 && (isUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />)}
+                      {tick.last_price > 0 ? `${tick.change_pct.toFixed(2)}%` : '—'}
+                    </div>
+
+                    {!isSearchMode && (
+                      <>
+                        <div style={{ textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
+                          {tick.ohlc?.open?.toFixed(2) ?? '—'}
+                        </div>
+                        <div style={{ textAlign: 'right', color: 'var(--accent-green)', fontSize: '0.88rem' }}>
+                          {tick.ohlc?.high?.toFixed(2) ?? '—'}
+                        </div>
+                        <div style={{ textAlign: 'right', color: 'var(--accent-red)', fontSize: '0.88rem' }}>
+                          {tick.ohlc?.low?.toFixed(2) ?? '—'}
+                        </div>
+                      </>
+                    )}
+
+                    <div style={{ textAlign: 'right', display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                      {tick.last_price > 0 ? (
+                        <>
+                          <button className="btn-trade-small btn-buy" onClick={() => handleWatchlistTrade(tick.symbol, 'BUY', tick.last_price)}>BUY</button>
+                          <button className="btn-trade-small btn-sell" onClick={() => handleWatchlistTrade(tick.symbol, 'SELL', tick.last_price)}>SELL</button>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Off-hours/Unavailable</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
-        <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.08)', borderLeft: '4px solid var(--accent-blue)', marginBottom: '1rem' }}>
-          <p style={{ fontSize: '0.85rem', fontWeight: '600', marginBottom: '4px' }}>
-            Last Decision: {agentStatus === 'ON' ? 'Analyzing...' : 'Standby'}
-          </p>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-            {agentStatus === 'ON'
-              ? 'DeepSeek is scanning NSE:RELIANCE for entry signals based on RSI and MACD divergence.'
-              : 'Agent is inactive. Start agent to enable AI reasoning.'}
-          </p>
-        </div>
-        <div style={{ fontSize: '0.85rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-            <span>Confidence Score</span><span>0%</span>
+
+        {/* AI Engine */}
+        <div className="card glass">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem' }}>
+            <Cpu size={20} color="var(--accent-blue)" />
+            <h3>AI Reasoning Engine</h3>
           </div>
-          <div style={{ height: '6px', background: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
-            <div style={{ width: '0%', height: '100%', background: 'var(--accent-blue)' }}></div>
+          <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.08)', borderLeft: '4px solid var(--accent-blue)', marginBottom: '1rem' }}>
+            <p style={{ fontSize: '0.85rem', fontWeight: '600', marginBottom: '4px' }}>
+              Last Decision: {agentStatus === 'ON' ? 'Analyzing...' : 'Standby'}
+            </p>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              {agentStatus === 'ON'
+                ? 'DeepSeek is scanning NSE:RELIANCE for entry signals based on RSI and MACD divergence.'
+                : 'Agent is inactive. Start agent to enable AI reasoning.'}
+            </p>
+          </div>
+          <div style={{ fontSize: '0.85rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <span>Confidence Score</span><span>0%</span>
+            </div>
+            <div style={{ height: '6px', background: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+              <div style={{ width: '0%', height: '100%', background: 'var(--accent-blue)' }}></div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
   // ─── ORDERS TAB ─────────────────────────────────────────
   const OrdersTab = () => {
@@ -962,11 +977,11 @@ const App: React.FC = () => {
             <Wallet size={18} /> Holdings
           </button>
           <p className="sidebar-nav-label" style={{ marginTop: '0.75rem' }}>TRADING</p>
-          <button className={`nav-item ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
+          <button className={`nav-item ${activeTab === 'place_order' ? 'active' : ''}`} onClick={() => setActiveTab('place_order')}>
             <ShoppingCart size={18} /> Place Order
           </button>
-          <button className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
-            <History size={18} /> Trade History
+          <button className={`nav-item ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
+            <History size={18} /> Orders
           </button>
           <p className="sidebar-nav-label" style={{ marginTop: '0.75rem' }}>TOOLS</p>
           <button className={`nav-item ${activeTab === 'risk' ? 'active' : ''}`} onClick={() => setActiveTab('risk')}>
@@ -1005,22 +1020,10 @@ const App: React.FC = () => {
         <div className="sidebar-content fade-in" key={activeTab}>
           {activeTab === 'dashboard' && DashboardTab()}
           {activeTab === 'profile' && ProfileTab()}
-          {activeTab === 'orders' && OrdersTab()}
+          {activeTab === 'place_order' && OrdersTab()}
           {activeTab === 'holdings' && HoldingsTab()}
 
-          {activeTab === 'history' && (() => {
-            const [orders, setOrders] = React.useState<any[]>([]);
-            const [histLoading, setHistLoading] = React.useState(false);
-            const [filter, setFilter] = React.useState<string>('ALL');
-
-            React.useEffect(() => {
-              setHistLoading(true);
-              axios.get('/api/orders/orders')
-                .then(r => setOrders(r.data.orders || []))
-                .catch(() => setOrders([]))
-                .finally(() => setHistLoading(false));
-            }, []);
-
+          {activeTab === 'orders' && (() => {
             const statusColor: Record<string, string> = {
               COMPLETE: 'var(--accent-green)',
               REJECTED: 'var(--accent-red)',
@@ -1030,16 +1033,16 @@ const App: React.FC = () => {
               TRIGGER_PENDING: '#f59e0b',
             };
             const statuses = ['ALL', 'COMPLETE', 'OPEN', 'REJECTED', 'CANCELLED'];
-            const displayed = filter === 'ALL' ? orders : orders.filter(o => o.status === filter);
+            const displayed = histFilter === 'ALL' ? historyOrders : historyOrders.filter(o => o.status === histFilter);
 
             return (
               <div className="fade-in">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border)' }}>
                   <div>
-                    <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Trade History</h2>
+                    <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Orders</h2>
                     <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Orders for the day from Zerodha</p>
                   </div>
-                  <button onClick={() => { setHistLoading(true); axios.get('/api/orders/orders').then(r => setOrders(r.data.orders || [])).finally(() => setHistLoading(false)); }}
+                  <button onClick={() => { setHistLoading(true); axios.get('/api/trade/orders').then(r => setHistoryOrders(r.data.orders || [])).finally(() => setHistLoading(false)); }}
                     className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px', opacity: histLoading ? 0.7 : 1 }}>
                     <RefreshCw size={14} className={histLoading ? 'spin' : ''} /> Refresh
                   </button>
@@ -1048,11 +1051,11 @@ const App: React.FC = () => {
                 {/* Status filter */}
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
                   {statuses.map(s => (
-                    <button key={s} onClick={() => setFilter(s)} style={{
+                    <button key={s} onClick={() => setHistFilter(s)} style={{
                       padding: '0.4rem 0.9rem', borderRadius: '20px', border: '1.5px solid',
-                      borderColor: filter === s ? 'var(--accent-blue)' : 'var(--border)',
-                      background: filter === s ? 'rgba(37,99,235,0.1)' : 'transparent',
-                      color: filter === s ? 'var(--accent-blue)' : 'var(--text-secondary)',
+                      borderColor: histFilter === s ? 'var(--accent-blue)' : 'var(--border)',
+                      background: histFilter === s ? 'rgba(37,99,235,0.1)' : 'transparent',
+                      color: histFilter === s ? 'var(--accent-blue)' : 'var(--text-secondary)',
                       fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer'
                     }}>{s}</button>
                   ))}
@@ -1074,7 +1077,7 @@ const App: React.FC = () => {
                   <div className="card glass" style={{ textAlign: 'center', padding: '3rem' }}>
                     <History size={48} color="var(--text-secondary)" style={{ margin: '0 auto 1rem' }} />
                     <h3>No Orders</h3>
-                    <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>No {filter !== 'ALL' ? filter.toLowerCase() + ' ' : ''}orders found for today.</p>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>No {histFilter !== 'ALL' ? histFilter.toLowerCase() + ' ' : ''}orders found for today.</p>
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>

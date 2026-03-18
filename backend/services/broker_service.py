@@ -36,14 +36,49 @@ class BrokerService:
         self.set_access_token(data["access_token"])
         return data
 
-    def get_margins(self) -> Dict[str, Any]:
-        return self.kite.margins() if self.kite else {}
+    def _make_httpx_request(self, endpoint: str) -> Any:
+        """Helper to make direct httpx calls to Zerodha, bypassing the SDK wrapper."""
+        if not self.kite or not self.kite.access_token:
+            raise ValueError("Kite client or access token not initialized")
+            
+        import httpx
+        url = f"https://api.kite.trade{endpoint}"
+        headers = {
+            "X-Kite-Version": "3",
+            "Authorization": f"token {self.api_key}:{self.kite.access_token}"
+        }
+        
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(f"Zerodha API Error on {endpoint}: {response.text}")
+                response.raise_for_status()
+            
+            data = response.json()
+            if data.get("status") == "success":
+                return data.get("data", {})
+            return data
 
-    def get_positions(self) -> List[Dict[str, Any]]:
-        return self.kite.positions() if self.kite else []
+    def get_margins(self) -> Dict[str, Any]:
+        try:
+            return self._make_httpx_request("/user/margins")
+        except Exception as e:
+            logger.error(f"Failed to fetch margins: {e}")
+            return {}
+
+    def get_positions(self) -> Dict[str, Any]:
+        try:
+            return self._make_httpx_request("/portfolio/positions")
+        except Exception as e:
+            logger.error(f"Failed to fetch positions: {e}")
+            return {"net": [], "day": []}
 
     def get_holdings(self) -> List[Dict[str, Any]]:
-        return self.kite.holdings() if self.kite else []
+        try:
+            return self._make_httpx_request("/portfolio/holdings")
+        except Exception as e:
+            logger.error(f"Failed to fetch holdings: {e}")
+            return []
 
     def place_order(self, 
                     variety: str, 
@@ -59,13 +94,22 @@ class BrokerService:
                     validity: str = "DAY",
                     stoploss: Optional[float] = None) -> str:
         """
-        Place an order using Zerodha Kite API.
+        Place an order using Zerodha Kite explicitly bypassing the SDK to enforce custom headers 
+        and circumvent brittle SDK Keep-Alive RemoteDisconnected bugs.
         """
-        if not self.kite:
-            raise ValueError("Kite client not initialized")
+        if not self.kite or not self.kite.access_token:
+            raise ValueError("Kite client or access token not initialized")
             
-        kwargs = {
-            "variety": variety,
+        import httpx
+        url = f"https://api.kite.trade/orders/{variety}"
+        headers = {
+            "X-Kite-Version": "3",
+            "Authorization": f"token {self.api_key}:{self.kite.access_token}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        
+        # Build payload explicitly without 'variety' (it goes into URL)
+        payload = {
             "exchange": exchange,
             "tradingsymbol": tradingsymbol,
             "transaction_type": transaction_type,
@@ -74,40 +118,39 @@ class BrokerService:
             "order_type": order_type,
             "validity": validity,
         }
-        if price is not None: kwargs["price"] = price
-        if trigger_price is not None: kwargs["trigger_price"] = trigger_price
-        if disclosed_quantity is not None: kwargs["disclosed_quantity"] = disclosed_quantity
-        if stoploss is not None: kwargs["stoploss"] = stoploss
+        if price is not None: payload["price"] = price
+        if trigger_price is not None: payload["trigger_price"] = trigger_price
+        if disclosed_quantity is not None: payload["disclosed_quantity"] = disclosed_quantity
+        if stoploss is not None: payload["stoploss"] = stoploss
             
-        order_id = self.kite.place_order(**kwargs)
-        return order_id
+        logger.info(f"Placing pure HTTPX order to {url} payload: {payload}")
+        
+        with httpx.Client(timeout=10.0) as client:
+            response = client.post(url, headers=headers, data=payload)
+            
+            if response.status_code != 200:
+                try:
+                    error_data = response.json()
+                    err_msg = error_data.get("message", response.text)
+                except:
+                    err_msg = response.text
+                logger.error(f"Order API Error: {err_msg}")
+                raise ValueError(err_msg)
+                
+            data = response.json()
+            if data.get("status") == "success":
+                return data.get("data", {}).get("order_id", "UNKNOWN_ORDER_ID")
+            
+            raise ValueError(f"Zerodha Order Failed: {data.get('message', 'Unknown Error')}")
 
     def get_profile(self) -> Dict[str, Any]:
         """
         Get the user profile from Zerodha Kite explicitly bypassing the SDK to enforce custom headers.
         """
-        if not self.kite or not self.kite.access_token:
-            raise ValueError("Kite client or access token not initialized")
-            
-        import httpx
-        url = "https://api.kite.trade/user/profile"
-        headers = {
-            "X-Kite-Version": "3",
-            "Authorization": f"token {self.api_key}:{self.kite.access_token}"
-        }
-        
-        logger.info(f"Fetching profile with headers: {headers}")
-        
-        with httpx.Client(timeout=10.0) as client:
-            response = client.get(url, headers=headers)
-            
-            if response.status_code != 200:
-                logger.error(f"Profile API Error: {response.text}")
-                response.raise_for_status()
-                
-            data = response.json()
-            if data.get("status") == "success":
-                return data.get("data", {})
-            return data
+        try:
+            return self._make_httpx_request("/user/profile")
+        except Exception as e:
+            logger.error(f"Profile API Error: {e}")
+            return {}
 
 broker_service = BrokerService()
