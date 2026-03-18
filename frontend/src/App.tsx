@@ -36,7 +36,7 @@ interface KiteProfile {
 }
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<Tab>('home');
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [agentStatus, setAgentStatus] = useState<'ON' | 'OFF'>('OFF');
   const [portfolio, setPortfolio] = useState<any>({ margins: {}, positions: [], holdings: [] });
   const [brokerConnected, setBrokerConnected] = useState<boolean>(false);
@@ -269,19 +269,16 @@ const App: React.FC = () => {
   // ─── PROFILE TAB ────────────────────────────────────────────
   const ProfileTab = () => (
     <div className="fade-in">
-      <div className="inner-page-topbar">
-        <button className="btn-back" onClick={() => setActiveTab('home')}>← Home</button>
-        <div className="inner-page-title">
-          <User size={22} color="var(--accent-blue)" />
-          <h2>My Profile</h2>
+      <div style={{ marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border)' }}>
+        <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>My Profile</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.75rem' }}>
+          <button onClick={fetchProfile} disabled={profileLoading} className="btn-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: profileLoading ? 0.7 : 1 }}>
+            <RefreshCw size={14} className={profileLoading ? 'spin' : ''} />
+            {profileLoading ? 'Loading...' : 'Refresh Profile'}
+          </button>
         </div>
-        <button onClick={fetchProfile} disabled={profileLoading} className="btn-primary"
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: profileLoading ? 0.7 : 1 }}>
-          <RefreshCw size={14} className={profileLoading ? 'spin' : ''} />
-          {profileLoading ? 'Loading...' : 'Refresh'}
-        </button>
       </div>
-      <div className="page-content">
 
       {profileLoading && !profile && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '300px', color: 'var(--text-secondary)' }}>
@@ -407,25 +404,22 @@ const App: React.FC = () => {
           )}
         </>
       )}
-      </div>
     </div>
   );
 
   // ─── DASHBOARD TAB ──────────────────────────────────────────
   const DashboardTab = () => (
     <div className="fade-in">
-      <div className="inner-page-topbar">
-        <button className="btn-back" onClick={() => setActiveTab('home')}>← Home</button>
-        <div className="inner-page-title">
-          <Activity size={22} color="var(--accent-green)" />
-          <h2>Trading Overview</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border)' }}>
+        <div>
+          <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Trading Overview</h2>
+          <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Welcome back{profile ? `, ${profile.user_shortname}` : ''}. AI Agent is currently {agentStatus}.</p>
         </div>
         <button onClick={toggleAgent} className="btn-primary"
           style={{ backgroundColor: agentStatus === 'ON' ? 'var(--accent-red)' : 'var(--accent-blue)', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Power size={16} /> {agentStatus === 'ON' ? 'Stop Agent' : 'Start Agent'}
         </button>
       </div>
-      <div className="page-content">
 
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginBottom: '2rem' }}>
         <div className="card glass">
@@ -483,7 +477,6 @@ const App: React.FC = () => {
           </div>
         </div>
       </section>
-      </div>  {/* close page-content */}
     </div>
   );
 
@@ -584,53 +577,84 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="app-container">
-      {error && (
-        <div style={{
-          position: 'sticky', top: 0, zIndex: 1000,
-          background: 'var(--accent-red)', color: 'white',
-          padding: '8px', textAlign: 'center', fontSize: '0.9rem'
-        }}>
-          ⚠️ {error}
+    <div className="app-shell">
+      {/* ── SIDEBAR ── */}
+      <aside className="sidebar">
+        {/* Logo */}
+        <div className="sidebar-logo">
+          <TrendingUp size={28} color="var(--accent-blue)" />
+          <span>SMART TRADE</span>
         </div>
-      )}
 
-      <main className="main-content-full">
-        {activeTab === 'home' && <HomeTab />}
-        {activeTab === 'dashboard' && <DashboardTab />}
-        {activeTab === 'profile' && <ProfileTab />}
-        {activeTab === 'orders' && <OrdersTab />}
-        
-        {activeTab === 'history' && (
-          <div className="fade-in">
-            <div className="inner-page-topbar">
-              <button className="btn-back" onClick={() => setActiveTab('home')}>← Home</button>
-              <div className="inner-page-title"><History size={22} color="#a855f7" /><h2>Trade History</h2></div>
-              <span />
-            </div>
-            <div className="page-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', gap: '1rem' }}>
+        {/* Nav */}
+        <nav className="sidebar-nav">
+          <button className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
+            <Activity size={18} /> Dashboard
+          </button>
+          <button className={`nav-item ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
+            <User size={18} /> My Profile
+          </button>
+          <button className={`nav-item ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
+            <ShoppingCart size={18} /> Place Order
+          </button>
+          <button className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
+            <History size={18} /> Trade History
+          </button>
+          <button className={`nav-item ${activeTab === 'risk' ? 'active' : ''}`} onClick={() => setActiveTab('risk')}>
+            <Shield size={18} /> Risk Manager
+          </button>
+        </nav>
+
+        {/* Broker connect widget */}
+        <div className="sidebar-broker">
+          <p className="sidebar-broker-label">Broker</p>
+          <span className={`status-badge ${brokerConnected ? 'status-online' : 'status-offline'}`} style={{ marginBottom: '0.5rem', display: 'inline-block' }}>
+            {brokerConnected ? 'Connected' : 'Not Connected'}
+          </span>
+          {!brokerConnected && (
+            <button onClick={handleZerodhaLogin} disabled={isConnecting} className="btn-primary"
+              style={{ width: '100%', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', padding: '0.6rem 1rem', opacity: isConnecting ? 0.7 : 1 }}>
+              {isConnecting ? 'Connecting...' : <><ExternalLink size={13} /> Connect Kite</>}
+            </button>
+          )}
+          {profile && (
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+              Logged in as <strong>{profile.user_shortname}</strong>
+            </p>
+          )}
+        </div>
+      </aside>
+
+      {/* ── MAIN CONTENT ── */}
+      <div className="sidebar-main">
+        {error && (
+          <div style={{ background: 'var(--accent-red)', color: 'white', padding: '8px', textAlign: 'center', fontSize: '0.9rem' }}>
+            ⚠️ {error}
+          </div>
+        )}
+
+        <div className="sidebar-content fade-in" key={activeTab}>
+          {activeTab === 'dashboard' && <DashboardTab />}
+          {activeTab === 'profile'   && <ProfileTab />}
+          {activeTab === 'orders'    && <OrdersTab />}
+
+          {activeTab === 'history' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '70vh', gap: '1rem', color: 'var(--text-secondary)' }}>
               <History size={60} color="#a855f7" />
-              <h3 style={{ fontSize: '1.8rem' }}>Trade History</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Coming soon: Full order and P&L history.</p>
+              <h3 style={{ fontSize: '1.8rem', color: 'var(--text-primary)' }}>Trade History</h3>
+              <p style={{ fontSize: '1.1rem' }}>Coming soon: Full order and P&L history.</p>
             </div>
-          </div>
-        )}
-        
-        {activeTab === 'risk' && (
-          <div className="fade-in">
-            <div className="inner-page-topbar">
-              <button className="btn-back" onClick={() => setActiveTab('home')}>← Home</button>
-              <div className="inner-page-title"><Shield size={22} color="var(--accent-red)" /><h2>Risk Manager</h2></div>
-              <span />
-            </div>
-            <div className="page-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', gap: '1rem' }}>
+          )}
+
+          {activeTab === 'risk' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '70vh', gap: '1rem', color: 'var(--text-secondary)' }}>
               <Shield size={60} color="var(--accent-red)" />
-              <h3 style={{ fontSize: '1.8rem' }}>Risk Manager</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Coming soon: Stop-loss and position sizing controls.</p>
+              <h3 style={{ fontSize: '1.8rem', color: 'var(--text-primary)' }}>Risk Manager</h3>
+              <p style={{ fontSize: '1.1rem' }}>Coming soon: Stop-loss and position sizing controls.</p>
             </div>
-          </div>
-        )}
-      </main>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
