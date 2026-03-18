@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Trade AI - Complete System Workflow</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0a0a14;
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+        .header h1 {
+            font-size: 2.4rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #00d2ff, #7b2ff7, #ff6ec7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+        .header p {
+            color: #777;
+            font-size: 1rem;
+        }
+        .section {
+            max-width: 1200px;
+            margin: 0 auto 50px auto;
+        }
+        .section h2 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #ccc;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section h2 .badge {
+            font-size: 0.7rem;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+        .section p.desc {
+            color: #666;
+            font-size: 0.85rem;
+            margin-bottom: 20px;
+        }
+        .diagram-card {
+            background: #12121e;
+            border: 1px solid #1e1e35;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 4px 30px rgba(0,0,0,0.4);
+            overflow-x: auto;
+        }
+        .mermaid { font-size: 14px; }
+
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 40px;
+            justify-content: center;
+        }
+        .pill {
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            border: 1px solid #333;
+            background: #16162a;
+        }
+        .pill.frontend { border-color: #1e90ff; color: #1e90ff; }
+        .pill.backend { border-color: #7b2ff7; color: #7b2ff7; }
+        .pill.ai { border-color: #ff9800; color: #ff9800; }
+        .pill.broker { border-color: #00c853; color: #00c853; }
+        .pill.db { border-color: #26a69a; color: #26a69a; }
+        .pill.data { border-color: #ff6ec7; color: #ff6ec7; }
+        .pill.security { border-color: #ff5252; color: #ff5252; }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            justify-content: center;
+            margin: 30px auto;
+            max-width: 900px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: #999;
+        }
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>⚡ Smart Trade AI — Complete System Workflow</h1>
+    <p>End-to-end architecture from frontend to broker execution</p>
+</div>
+
+<!-- Tech Stack -->
+<div class="tech-stack">
+    <span class="pill frontend">Vite + React (Frontend)</span>
+    <span class="pill backend">FastAPI + Uvicorn (Backend)</span>
+    <span class="pill ai">Ollama / DeepSeek (AI)</span>
+    <span class="pill broker">Zerodha Kite (Broker)</span>
+    <span class="pill db">SQLite + SQLModel (DB)</span>
+    <span class="pill data">BSE API / Nitter / yFinance (Data)</span>
+    <span class="pill security">Secure Trade Gateway (httpx)</span>
+</div>
+
+<!-- Legend -->
+<div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#1e90ff"></div> Frontend</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#7b2ff7"></div> Core Engine</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ff9800"></div> AI / LLM</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e040fb"></div> Secure Trade Gateway</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#00c853"></div> Broker / Orders</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#26a69a"></div> Database / Memory</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ff6ec7"></div> External Data</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ffc107"></div> Risk / Validation</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ef5350"></div> Rejected / Skip</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 1: Authentication & Broker Connection -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="section">
+    <h2>1. Authentication & Broker Connection <span class="badge" style="background:#1e90ff33;color:#1e90ff">auth.py</span></h2>
+    <p class="desc">OAuth2 flow with Zerodha Kite — user clicks "Connect Broker" on frontend</p>
+    <div class="diagram-card">
+        <div class="mermaid">
+graph LR
+    U["👤 User"] -->|"Clicks Connect Broker"| FE["🌐 Frontend<br/>React + Vite<br/>localhost:5173"]
+    FE -->|"GET /api/auth/zerodha/login"| AUTH["🔐 Auth Router<br/>auth.py"]
+    AUTH -->|"Returns login_url"| FE
+    FE -->|"Redirects browser"| KITE["🟢 Zerodha Kite<br/>kite.zerodha.com"]
+    KITE -->|"User logs in and approves"| CB["🔁 Callback<br/>/api/auth/zerodha/callback"]
+    CB -->|"request_token to access_token"| BS["Broker Service<br/>broker_service.py"]
+    BS -->|"kite.generate_session"| KITE
+    CB -->|"Stores access_token"| DB[("💾 SQLite DB<br/>smart_trade.db<br/>User table")]
+    CB -->|"Redirect ?auth=success"| FE
+
+    style U fill:#1e90ff,stroke:#1e90ff,color:#fff
+    style FE fill:#1e90ff,stroke:#1e90ff,color:#fff
+    style AUTH fill:#7b2ff7,stroke:#7b2ff7,color:#fff
+    style KITE fill:#00c853,stroke:#00c853,color:#fff
+    style CB fill:#7b2ff7,stroke:#7b2ff7,color:#fff
+    style BS fill:#00c853,stroke:#00c853,color:#fff
+    style DB fill:#26a69a,stroke:#26a69a,color:#fff
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 2: Market Data -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="section">
+    <h2>2. Live Market Data <span class="badge" style="background:#ff6ec733;color:#ff6ec7">market.py</span></h2>
+    <p class="desc">Watchlist prices via Yahoo Finance (bypasses Zerodha paid API quotas)</p>
+    <div class="diagram-card">
+        <div class="mermaid">
+graph LR
+    FE2["🌐 Frontend<br/>Polls every 3s"] -->|"GET /api/market/watchlist"| MR["📊 Market Router<br/>market.py"]
+    MR -->|"Check cache age"| CACHE{"🕐 Cache<br/>less than 3s old?"}
+    CACHE -->|"Yes"| RET["Return cached data"]
+    CACHE -->|"No"| YF["📈 Yahoo Finance<br/>yfinance API"]
+    YF -->|"OHLC for 10 stocks:<br/>RELIANCE, TCS, INFY,<br/>HDFCBANK, SBIN etc."| MR
+    MR -->|"LTP, Change %, OHLC"| FE2
+
+    style FE2 fill:#1e90ff,stroke:#1e90ff,color:#fff
+    style MR fill:#7b2ff7,stroke:#7b2ff7,color:#fff
+    style YF fill:#ff6ec7,stroke:#ff6ec7,color:#fff
+    style CACHE fill:#ffc107,stroke:#ffc107,color:#000
+    style RET fill:#26a69a,stroke:#26a69a,color:#fff
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 3: AI Agent Trading Loop (SECURE) -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="section">
+    <h2>3. AI Agent Trading Loop — Secure Architecture <span class="badge" style="background:#7b2ff733;color:#7b2ff7">agent_scheduler.py</span></h2>
+    <p class="desc">All 3 AI paths submit trade requests via the secure backend API gateway — never touching broker directly</p>
+    <div class="diagram-card">
+        <div class="mermaid">
+graph TD
+    FE3["🌐 Frontend<br/>Toggle Agent ON"] -->|"POST /api/agent/toggle"| AGT["🤖 Agent Router"]
+    AGT -->|"start"| SCHED["⏱️ Agent Scheduler<br/>60s loop"]
+
+    SCHED --> PATH1
+    SCHED --> PATH2
+    SCHED --> PATH3
+
+    subgraph PATH1["📈 Path 1: Technical Analysis"]
+        direction TB
+        MD["Simulated Market Data<br/>Price DataFrame"] --> IND["📐 Indicator Service<br/>RSI, MACD, Regime"]
+        IND --> FILTER{"🔍 Pre-Filter<br/>RSI below 30 or above 70?<br/>MACD crossover?"}
+        FILTER -->|"No signal"| SKIP1["⛔ HOLD<br/>Skip LLM call"]
+        FILTER -->|"Strong signal"| LLM1["🧠 DeepSeek<br/>generate_decision"]
+        LLM1 -->|"Confidence >= 0.7"| TRS1["📤 trade_request_service<br/>source: technical_agent"]
+    end
+
+    subgraph PATH2["📰 Path 2: BSE News"]
+        direction TB
+        BSE["🌐 BSE India API<br/>Corporate Announcements"] --> NEWS["📄 News Service<br/>news_service.py"]
+        NEWS -->|"Top 5 headlines"| LLM2["🧠 DeepSeek<br/>analyze_news"]
+        LLM2 -->|"Confidence > 0.7"| TRS2["📤 trade_request_service<br/>source: news_agent"]
+        LLM2 -->|"HOLD or low conf"| SKIP2["⛔ No action"]
+    end
+
+    subgraph PATH3["🐦 Path 3: Social Media"]
+        direction TB
+        NITTER["🐦 Twitter via Nitter<br/>ntscraper"] --> TWIT["📱 Twitter Service<br/>twitter_service.py"]
+        TWIT -->|"Cashtag tweets<br/>eg RELIANCE"| LLM3["🧠 DeepSeek<br/>analyze_social_media"]
+        LLM3 -->|"Confidence > 0.8"| TRS3["📤 trade_request_service<br/>source: social_agent"]
+        LLM3 -->|"Hype / low conf"| SKIP3["⛔ No action"]
+    end
+
+    TRS1 -->|"POST /api/trade/execute"| GW["🔒 SECURE TRADE GATEWAY<br/>trade.py<br/>Auth + Validate + Log"]
+    TRS2 -->|"POST /api/trade/execute"| GW
+    TRS3 -->|"POST /api/trade/execute"| GW
+
+    GW -->|"1. Load access_token from DB"| DB4[("💾 User Table")]
+    GW -->|"2. broker_service.place_order"| BROKER["🟢 Zerodha Kite API"]
+    GW -->|"3. Log trade with source"| TF[("💾 TradeFeedback<br/>source + reason audit")]
+
+    TF -->|"Every 5 trades"| REFLECT["🧠 DeepSeek<br/>reflect_on_trades"]
+    REFLECT -->|"Strategy adjustments"| AGENT_MEM[("🗄️ AgentMemory Table")]
+
+    style FE3 fill:#1e90ff,stroke:#1e90ff,color:#fff
+    style AGT fill:#7b2ff7,stroke:#7b2ff7,color:#fff
+    style SCHED fill:#7b2ff7,stroke:#7b2ff7,color:#fff
+    style MD fill:#ff6ec7,stroke:#ff6ec7,color:#fff
+    style IND fill:#7b2ff7,stroke:#7b2ff7,color:#fff
+    style FILTER fill:#ffc107,stroke:#ffc107,color:#000
+    style SKIP1 fill:#ef5350,stroke:#ef5350,color:#fff
+    style LLM1 fill:#ff9800,stroke:#ff9800,color:#fff
+    style TRS1 fill:#e040fb,stroke:#e040fb,color:#fff
+    style BSE fill:#ff6ec7,stroke:#ff6ec7,color:#fff
+    style NEWS fill:#7b2ff7,stroke:#7b2ff7,color:#fff
+    style LLM2 fill:#ff9800,stroke:#ff9800,color:#fff
+    style TRS2 fill:#e040fb,stroke:#e040fb,color:#fff
+    style SKIP2 fill:#ef5350,stroke:#ef5350,color:#fff
+    style NITTER fill:#ff6ec7,stroke:#ff6ec7,color:#fff
+    style TWIT fill:#7b2ff7,stroke:#7b2ff7,color:#fff
+    style LLM3 fill:#ff9800,stroke:#ff9800,color:#fff
+    style TRS3 fill:#e040fb,stroke:#e040fb,color:#fff
+    style SKIP3 fill:#ef5350,stroke:#ef5350,color:#fff
+    style GW fill:#e040fb,stroke:#e040fb,color:#fff
+    style BROKER fill:#00c853,stroke:#00c853,color:#fff
+    style DB4 fill:#26a69a,stroke:#26a69a,color:#fff
+    style TF fill:#26a69a,stroke:#26a69a,color:#fff
+    style REFLECT fill:#ff9800,stroke:#ff9800,color:#fff
+    style AGENT_MEM fill:#26a69a,stroke:#26a69a,color:#fff
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 4: Manual Trade Flow -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="section">
+    <h2>4. Manual Trade Execution <span class="badge" style="background:#00c85333;color:#00c853">trade.py</span></h2>
+    <p class="desc">Frontend also uses the same secure gateway — source tracked as "manual"</p>
+    <div class="diagram-card">
+        <div class="mermaid">
+graph LR
+    FE4["🌐 Frontend"] -->|"POST /api/trade/execute<br/>source: manual"| GW2["🔒 SECURE TRADE GATEWAY<br/>trade.py"]
+    GW2 -->|"Fetch access_token"| DB2[("💾 User Table")]
+    GW2 -->|"broker_service.place_order"| ZER["🟢 Zerodha Kite API"]
+    GW2 -->|"Log: source=manual"| TF2[("💾 TradeFeedback")]
+
+    style FE4 fill:#1e90ff,stroke:#1e90ff,color:#fff
+    style GW2 fill:#e040fb,stroke:#e040fb,color:#fff
+    style ZER fill:#00c853,stroke:#00c853,color:#fff
+    style DB2 fill:#26a69a,stroke:#26a69a,color:#fff
+    style TF2 fill:#26a69a,stroke:#26a69a,color:#fff
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 5: Portfolio -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="section">
+    <h2>5. Portfolio View <span class="badge" style="background:#26a69a33;color:#26a69a">portfolio.py</span></h2>
+    <p class="desc">Fetches holdings, positions, and margins from Zerodha</p>
+    <div class="diagram-card">
+        <div class="mermaid">
+graph LR
+    FE5["🌐 Frontend"] -->|"GET /api/portfolio"| PR["📋 Portfolio Router"]
+    PR -->|"Load access_token"| DB3[("💾 User Table")]
+    PR -->|"set_access_token"| BS3["🟢 Broker Service"]
+    BS3 -->|"kite.margins<br/>kite.positions<br/>kite.holdings"| ZER2["🟢 Zerodha Kite API"]
+    BS3 --> PR
+    PR -->|"holdings, positions,<br/>margins, username"| FE5
+
+    style FE5 fill:#1e90ff,stroke:#1e90ff,color:#fff
+    style PR fill:#7b2ff7,stroke:#7b2ff7,color:#fff
+    style BS3 fill:#00c853,stroke:#00c853,color:#fff
+    style ZER2 fill:#00c853,stroke:#00c853,color:#fff
+    style DB3 fill:#26a69a,stroke:#26a69a,color:#fff
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 6: Security Architecture -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="section">
+    <h2>6. Security Architecture <span class="badge" style="background:#e040fb33;color:#e040fb">trade_request_service.py</span></h2>
+    <p class="desc">The agent NEVER touches broker_service directly — all orders funnel through the secure gateway</p>
+    <div class="diagram-card">
+        <div class="mermaid">
+graph LR
+    subgraph AGENT_LAYER["🤖 Agent Layer — No Broker Access"]
+        DE["Decision Engine"]
+        AS["Agent Scheduler"]
+    end
+
+    subgraph SECURE_LAYER["🔒 Secure Gateway — trade.py"]
+        TRS["trade_request_service<br/>httpx async POST"]
+        TR["Trade Router<br/>/api/trade/execute"]
+        AUTH2["Auth Check<br/>Load access_token"]
+        LOG["Audit Log<br/>source + reason"]
+    end
+
+    subgraph BROKER_LAYER["🟢 Broker Layer — Only trade.py touches this"]
+        BS4["broker_service<br/>place_order"]
+        ZER3["Zerodha Kite API"]
+    end
+
+    DE --> TRS
+    AS --> TRS
+    TRS -->|"HTTP POST"| TR
+    TR --> AUTH2
+    AUTH2 --> BS4
+    BS4 --> ZER3
+    TR --> LOG
+
+    style DE fill:#7b2ff7,stroke:#7b2ff7,color:#fff
+    style AS fill:#7b2ff7,stroke:#7b2ff7,color:#fff
+    style TRS fill:#e040fb,stroke:#e040fb,color:#fff
+    style TR fill:#e040fb,stroke:#e040fb,color:#fff
+    style AUTH2 fill:#e040fb,stroke:#e040fb,color:#fff
+    style LOG fill:#26a69a,stroke:#26a69a,color:#fff
+    style BS4 fill:#00c853,stroke:#00c853,color:#fff
+    style ZER3 fill:#00c853,stroke:#00c853,color:#fff
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 7: Database Schema -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="section">
+    <h2>7. Database Schema <span class="badge" style="background:#26a69a33;color:#26a69a">models.py</span></h2>
+    <p class="desc">SQLite database with 3 tables — User, AgentMemory, TradeFeedback</p>
+    <div class="diagram-card">
+        <div class="mermaid">
+erDiagram
+    USER {
+        int id PK
+        string username UK
+        string email UK
+        string hashed_password
+        bool is_active
+        string kite_api_key
+        string kite_api_secret
+        string kite_access_token
+    }
+    AGENT_MEMORY {
+        int id PK
+        int user_id FK
+        json strategy_weights
+        string risk_level
+        float confidence_threshold
+        datetime last_updated
+    }
+    TRADE_FEEDBACK {
+        int id PK
+        int user_id FK
+        string broker_order_id
+        string symbol
+        string side
+        float price
+        int quantity
+        string status
+        float outcome
+        string market_condition
+        json indicators_snapshot
+        string llm_reason
+        datetime timestamp
+    }
+    USER ||--o| AGENT_MEMORY : "has"
+    USER ||--o{ TRADE_FEEDBACK : "has many"
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: 'dark',
+        themeVariables: {
+            primaryColor: '#7b2ff7',
+            primaryTextColor: '#fff',
+            lineColor: '#444',
+            secondaryColor: '#1a1a2e',
+            tertiaryColor: '#2a2a4a',
+            fontFamily: 'Inter'
+        },
+        flowchart: {
+            useMaxWidth: true,
+            htmlLabels: true,
+            curve: 'basis'
+        }
+    });
+</script>
+</body>
+</html>
