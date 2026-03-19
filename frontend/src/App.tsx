@@ -26,11 +26,13 @@ import {
   Package,
   X,
   LineChart,
+  Bot,
 } from 'lucide-react';
 import { CandlestickChart, Candle } from './components/CandlestickChart';
 import { RiskManager } from './components/RiskManager';
+import { AgentTab } from './components/AgentTab';
 
-type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders' | 'holdings' | 'positions' | 'place_order';
+type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders' | 'holdings' | 'positions' | 'place_order' | 'agent';
 
 interface KiteProfile {
   user_id: string;
@@ -1210,6 +1212,9 @@ const App: React.FC = () => {
           <button className={`nav-item ${activeTab === 'risk' ? 'active' : ''}`} onClick={() => setActiveTab('risk')}>
             <Shield size={18} /> Risk Manager
           </button>
+          <button className={`nav-item ${activeTab === 'agent' ? 'active' : ''}`} onClick={() => setActiveTab('agent')} style={{ position: 'relative' }}>
+            <Bot size={18} /> AI Agent
+          </button>
         </nav>
 
         {/* Broker connect widget */}
@@ -1370,6 +1375,15 @@ const App: React.FC = () => {
             <div className="fade-in">
               <RiskManager 
                 totalM2M={portfolio.positions?.net?.reduce((sum: number, p: any) => sum + (p.m2m || p.pnl || 0), 0) || 0}
+              />
+            </div>
+          )}
+
+          {activeTab === 'agent' && (
+            <div className="fade-in">
+              <AgentTab
+                brokerConnected={brokerConnected}
+                accountBalance={portfolio.margins?.equity?.net || 100000}
               />
             </div>
           )}
