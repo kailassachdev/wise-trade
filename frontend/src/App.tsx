@@ -28,6 +28,7 @@ import {
   LineChart,
 } from 'lucide-react';
 import { CandlestickChart, Candle } from './components/CandlestickChart';
+import { RiskManager } from './components/RiskManager';
 
 type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders' | 'holdings' | 'positions' | 'place_order';
 
@@ -1366,10 +1367,10 @@ const App: React.FC = () => {
           })()}
 
           {activeTab === 'risk' && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '70vh', gap: '1rem', color: 'var(--text-secondary)' }}>
-              <Shield size={60} color="var(--accent-red)" />
-              <h3 style={{ fontSize: '1.8rem', color: 'var(--text-primary)' }}>Risk Manager</h3>
-              <p style={{ fontSize: '1.1rem' }}>Coming soon: Stop-loss and position sizing controls.</p>
+            <div className="fade-in">
+              <RiskManager 
+                totalM2M={portfolio.positions?.net?.reduce((sum: number, p: any) => sum + (p.m2m || p.pnl || 0), 0) || 0}
+              />
             </div>
           )}
         </div>
