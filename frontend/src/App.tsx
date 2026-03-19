@@ -24,7 +24,10 @@ import {
   Search,
   Wallet,
   Package,
+  X,
+  LineChart,
 } from 'lucide-react';
+import { CandlestickChart, Candle } from './components/CandlestickChart';
 
 type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders' | 'holdings' | 'positions' | 'place_order';
 
@@ -97,6 +100,33 @@ const App: React.FC = () => {
 
   // Positions Tab State
   const [posView, setPosView] = useState<'net' | 'day'>('net');
+
+  // Chart Modal State
+  const [selectedChartPosition, setSelectedChartPosition] = useState<any | null>(null);
+  const [chartData, setChartData] = useState<Candle[]>([]);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [chartError, setChartError] = useState<string | null>(null);
+
+  const openChart = async (position: any) => {
+    setSelectedChartPosition(position);
+    setChartLoading(true);
+    setChartError(null);
+    try {
+      const res = await axios.get(`/api/market/historical/${position.tradingsymbol}`);
+      if (res.data.status === 'success') {
+        const mapped = res.data.candles.map((c: any) => ({
+          timestamp: c[0], open: c[1], high: c[2], low: c[3], close: c[4], volume: c[5]
+        }));
+        setChartData(mapped);
+      } else {
+        setChartError(res.data.message || "Failed to load chart data");
+      }
+    } catch (err: any) {
+      setChartError(err.response?.data?.message || err.message || "Network error loading chart");
+    } finally {
+      setChartLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (activeTab === 'orders' && brokerConnected) {
@@ -1050,7 +1080,14 @@ const App: React.FC = () => {
               const pnl = p.m2m || p.pnl || 0;
               const isUp = pnl >= 0;
               return (
-                <div key={`${p.tradingsymbol}-${p.product}-${i}`} className="card glass" style={{ padding: '1.25rem 1.5rem' }}>
+                <div 
+                  key={`${p.tradingsymbol}-${p.product}-${i}`} 
+                  className="card glass chart-clickable-card" 
+                  style={{ padding: '1.25rem 1.5rem', cursor: 'pointer', transition: 'transform 0.2s, box-shadow 0.2s' }}
+                  onClick={() => openChart(p)}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 800, fontSize: '1.05rem' }}>{p.tradingsymbol}</span>
@@ -1091,6 +1128,45 @@ const App: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Chart Modal Overlay */}
+        {selectedChartPosition && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 100,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem'
+          }}>
+            <div className="card glass fade-in" style={{ width: '100%', maxWidth: '900px', position: 'relative', padding: '2rem' }}>
+              <button 
+                onClick={() => setSelectedChartPosition(null)}
+                style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', padding: '0.4rem', cursor: 'pointer', color: 'var(--text-primary)' }}
+              >
+                <X size={20} />
+              </button>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                <LineChart size={28} color="var(--accent-blue)" />
+                <div>
+                  <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>{selectedChartPosition.tradingsymbol}</h2>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{selectedChartPosition.exchange} • 15 Minute Interval (5 Days)</p>
+                </div>
+              </div>
+
+              {chartLoading ? (
+                <div style={{ height: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+                  <RefreshCw className="spin" size={32} color="var(--text-secondary)" />
+                  <p style={{ color: 'var(--text-secondary)' }}>Loading historical data...</p>
+                </div>
+              ) : chartError ? (
+                <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-red)', textAlign: 'center', padding: '2rem' }}>
+                  <p><strong>Error:</strong> {chartError}</p>
+                </div>
+              ) : (
+                <CandlestickChart data={chartData} />
+              )}
+            </div>
           </div>
         )}
       </div>

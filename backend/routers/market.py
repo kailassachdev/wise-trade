@@ -182,3 +182,38 @@ def search_stocks(q: str = Query(..., description="Company name or symbol to sea
     except Exception as e:
         logger.error(f"Search API Error: {e}")
         return {"status": "error", "message": str(e), "results": []}
+
+@router.get("/historical/{symbol}")
+def get_historical(symbol: str, interval: str = "15minute"):
+    """Fetch historical candle data cleanly using free Yahoo Finance API."""
+    try:
+        yf_sym = f"{symbol}.NS"
+        yf_interval = "15m" if interval == "15minute" else "1d"
+        yf_period = "5d" if interval == "15minute" else "3mo"
+        
+        df = yf.download(yf_sym, period=yf_period, interval=yf_interval, progress=False)
+        
+        if df.empty:
+            return {"status": "success", "candles": []}
+            
+        candles = []
+        for idx, row in df.iterrows():
+            try:
+                # Handle different yfinance version outputs gracefully
+                if isinstance(row.get("Open"), (int, float)):
+                    c_open, c_high, c_low, c_close = row["Open"], row["High"], row["Low"], row["Close"]
+                    c_vol = row.get("Volume", 0)
+                else:
+                    c_open, c_high, c_low, c_close = row["Open"].iloc[0], row["High"].iloc[0], row["Low"].iloc[0], row["Close"].iloc[0]
+                    c_vol = row["Volume"].iloc[0] if "Volume" in row else 0
+                    
+                timestamp = idx.isoformat()
+                candles.append([timestamp, float(c_open), float(c_high), float(c_low), float(c_close), int(c_vol)])
+            except Exception:
+                continue
+                
+        return {"status": "success", "candles": candles}
+        
+    except Exception as e:
+        logger.error(f"Historical API Error: {e}")
+        return {"status": "error", "message": str(e), "candles": []}
