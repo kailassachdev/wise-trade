@@ -48,6 +48,20 @@ export const CandlestickChart = ({ data }: { data: Candle[] }) => {
         );
       })}
 
+      {/* X-Axis Labels */}
+      {[0, 0.2, 0.4, 0.6, 0.8, 0.99].map((pct, i) => {
+        const index = Math.min(Math.floor(data.length * pct), data.length - 1);
+        if (index < 0) return null;
+        const x = getX(index);
+        const d = new Date(data[index].timestamp);
+        const label = `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+        return (
+          <text key={`x-${i}`} x={x} y={height - 10} fill="var(--text-secondary)" fontSize="10" textAnchor="middle">
+            {label}
+          </text>
+        );
+      })}
+
       {/* Candles */}
       {data.map((d, i) => {
         const isUp = d.close >= d.open;
