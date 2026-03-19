@@ -26,7 +26,7 @@ import {
   Package,
 } from 'lucide-react';
 
-type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders' | 'holdings' | 'place_order';
+type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders' | 'holdings' | 'positions' | 'place_order';
 
 interface KiteProfile {
   user_id: string;
@@ -94,6 +94,9 @@ const App: React.FC = () => {
   const [historyOrders, setHistoryOrders] = useState<any[]>([]);
   const [histLoading, setHistLoading] = useState(false);
   const [histFilter, setHistFilter] = useState<string>('ALL');
+
+  // Positions Tab State
+  const [posView, setPosView] = useState<'net' | 'day'>('net');
 
   useEffect(() => {
     if (activeTab === 'orders' && brokerConnected) {
@@ -880,8 +883,9 @@ const App: React.FC = () => {
   // ─── HOLDINGS TAB ────────────────────────────────────────────
   const HoldingsTab = () => {
     const holdings: any[] = portfolio.holdings || [];
-    const totalInvested = holdings.reduce((s: number, h: any) => s + (h.average_price * h.quantity), 0);
-    const totalCurrent = holdings.reduce((s: number, h: any) => s + (h.last_price * h.quantity), 0);
+
+    const totalInvested = holdings.reduce((s: number, h: any) => s + ((h.average_price || 0) * (h.quantity || 0)), 0);
+    const totalCurrent = holdings.reduce((s: number, h: any) => s + ((h.last_price || 0) * (h.quantity || 0)), 0);
     const totalPnl = totalCurrent - totalInvested;
     const totalPnlPct = totalInvested ? (totalPnl / totalInvested) * 100 : 0;
     return (
@@ -891,17 +895,22 @@ const App: React.FC = () => {
             <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Holdings</h2>
             <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Stocks currently held in your demat account</p>
           </div>
-          {holdings.length > 0 && (
-            <div style={{ textAlign: 'right' }}>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total P&L</p>
-              <p style={{ fontSize: '1.5rem', fontWeight: 800, color: totalPnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-                {totalPnl >= 0 ? '+' : ''}₹{totalPnl.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-              </p>
-              <p style={{ fontSize: '0.85rem', color: totalPnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 600 }}>
-                {totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(2)}%
-              </p>
-            </div>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {holdings.length > 0 && (
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total P&L</p>
+                <p style={{ fontSize: '1.5rem', fontWeight: 800, color: totalPnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                  {totalPnl >= 0 ? '+' : ''}₹{totalPnl.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </p>
+                <p style={{ fontSize: '0.85rem', color: totalPnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 600 }}>
+                  {totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(2)}%
+                </p>
+              </div>
+            )}
+            <button onClick={fetchPortfolio} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <RefreshCw size={14} /> Refresh
+            </button>
+          </div>
         </div>
         {!brokerConnected ? (
           <div className="card glass" style={{ textAlign: 'center', padding: '3rem' }}>
@@ -927,17 +936,22 @@ const App: React.FC = () => {
                 <span>Symbol</span><span style={{ textAlign: 'right' }}>Qty</span><span style={{ textAlign: 'right' }}>Avg Price</span><span style={{ textAlign: 'right' }}>LTP</span><span style={{ textAlign: 'right' }}>Invested</span><span style={{ textAlign: 'right' }}>Current</span><span style={{ textAlign: 'right' }}>P&L</span>
               </div>
               {holdings.map((h: any) => {
-                const invested = h.average_price * h.quantity;
-                const current = h.last_price * h.quantity;
+                const invested = (h.average_price || 0) * (h.quantity || 0);
+                const current = (h.last_price || 0) * (h.quantity || 0);
                 const pnl = current - invested;
                 const pnlPct = invested ? (pnl / invested) * 100 : 0;
                 const isUp = pnl >= 0;
                 return (
                   <div key={h.tradingsymbol} className="holdings-row">
-                    <div><p style={{ fontWeight: 700 }}>{h.tradingsymbol}</p><p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{h.exchange}</p></div>
+                    <div>
+                      <p style={{ fontWeight: 700 }}>
+                        {h.tradingsymbol}
+                      </p>
+                      <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{h.exchange}</p>
+                    </div>
                     <div style={{ textAlign: 'right', fontWeight: 600 }}>{h.quantity}</div>
-                    <div style={{ textAlign: 'right' }}>₹{h.average_price?.toFixed(2)}</div>
-                    <div style={{ textAlign: 'right', fontWeight: 700 }}>₹{h.last_price?.toFixed(2)}</div>
+                    <div style={{ textAlign: 'right' }}>₹{(h.average_price || 0).toFixed(2)}</div>
+                    <div style={{ textAlign: 'right', fontWeight: 700 }}>₹{(h.last_price || 0).toFixed(2)}</div>
                     <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>₹{invested.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
                     <div style={{ textAlign: 'right' }}>₹{current.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
                     <div style={{ textAlign: 'right', color: isUp ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 700 }}>
@@ -949,6 +963,135 @@ const App: React.FC = () => {
               })}
             </div>
           </>
+        )}
+      </div>
+    );
+  };
+
+  // ─── POSITIONS TAB ────────────────────────────────────────────
+  const PositionsTab = () => {
+    const positionsData = portfolio.positions || {};
+    const netPositions: any[] = Array.isArray(positionsData) ? positionsData : (positionsData.net || []);
+    const dayPositions: any[] = Array.isArray(positionsData) ? [] : (positionsData.day || []);
+    const totalM2M = netPositions.reduce((s: number, p: any) => s + (p.m2m || p.pnl || 0), 0);
+    const totalUnrealised = netPositions.reduce((s: number, p: any) => s + (p.unrealised || 0), 0);
+    const totalRealised = netPositions.reduce((s: number, p: any) => s + (p.realised || 0), 0);
+    const displayPositions = posView === 'net' ? netPositions : dayPositions;
+
+    return (
+      <div className="fade-in">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border)' }}>
+          <div>
+            <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Positions</h2>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Open intraday & delivery positions for today</p>
+          </div>
+          <button onClick={fetchPortfolio} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <RefreshCw size={14} /> Refresh
+          </button>
+        </div>
+
+        {/* Stats row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+          <div className="card glass">
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total M2M</p>
+            <h3 style={{ fontSize: '1.4rem', marginTop: '6px', color: totalM2M >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+              {totalM2M >= 0 ? '+' : ''}₹{totalM2M.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+            </h3>
+          </div>
+          <div className="card glass">
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Unrealised</p>
+            <h3 style={{ fontSize: '1.4rem', marginTop: '6px', color: totalUnrealised >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+              {totalUnrealised >= 0 ? '+' : ''}₹{totalUnrealised.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+            </h3>
+          </div>
+          <div className="card glass">
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Realised</p>
+            <h3 style={{ fontSize: '1.4rem', marginTop: '6px', color: totalRealised >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+              {totalRealised >= 0 ? '+' : ''}₹{totalRealised.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+            </h3>
+          </div>
+          <div className="card glass">
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Open Positions</p>
+            <h3 style={{ fontSize: '1.4rem', marginTop: '6px' }}>{netPositions.length}</h3>
+          </div>
+        </div>
+
+        {/* Net / Day toggle */}
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
+          {(['net', 'day'] as const).map(v => (
+            <button key={v} onClick={() => setPosView(v)} style={{
+              padding: '0.4rem 1.2rem', borderRadius: '20px', border: '1.5px solid',
+              borderColor: posView === v ? 'var(--accent-blue)' : 'var(--border)',
+              background: posView === v ? 'rgba(37,99,235,0.1)' : 'transparent',
+              color: posView === v ? 'var(--accent-blue)' : 'var(--text-secondary)',
+              fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', textTransform: 'uppercase'
+            }}>{v}</button>
+          ))}
+          <span style={{ marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '2' }}>
+            {displayPositions.length} position{displayPositions.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+
+        {!brokerConnected ? (
+          <div className="card glass" style={{ textAlign: 'center', padding: '3rem' }}>
+            <Activity size={48} color="var(--text-secondary)" style={{ margin: '0 auto 1rem' }} />
+            <h3>Not Connected</h3>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>Connect your Zerodha account to view positions.</p>
+          </div>
+        ) : displayPositions.length === 0 ? (
+          <div className="card glass" style={{ textAlign: 'center', padding: '3rem' }}>
+            <Activity size={48} color="var(--text-secondary)" style={{ margin: '0 auto 1rem' }} />
+            <h3>No {posView === 'net' ? 'Net' : 'Day'} Positions</h3>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>No open {posView} positions for today.</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {displayPositions.map((p: any, i: number) => {
+              const pnl = p.m2m || p.pnl || 0;
+              const isUp = pnl >= 0;
+              return (
+                <div key={`${p.tradingsymbol}-${p.product}-${i}`} className="card glass" style={{ padding: '1.25rem 1.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 800, fontSize: '1.05rem' }}>{p.tradingsymbol}</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', textTransform: 'uppercase', border: '1px solid var(--border)', padding: '2px 8px', borderRadius: '4px' }}>{p.exchange}</span>
+                      <span style={{
+                        fontSize: '0.78rem', fontWeight: 700,
+                        color: p.product === 'CNC' ? 'var(--accent-blue)' : '#f59e0b',
+                        background: p.product === 'CNC' ? 'rgba(59,130,246,0.1)' : 'rgba(245,158,11,0.1)',
+                        padding: '2px 10px', borderRadius: '20px',
+                        border: `1px solid ${p.product === 'CNC' ? 'rgba(59,130,246,0.3)' : 'rgba(245,158,11,0.3)'}`
+                      }}>{p.product}</span>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <p style={{ fontSize: '1.1rem', fontWeight: 800, color: isUp ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                        {isUp ? '+' : ''}₹{pnl.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                      </p>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>M2M P&L</p>
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.75rem', marginTop: '1rem' }}>
+                    {[
+                      ['Qty', p.quantity],
+                      ['Buy Qty', p.buy_quantity],
+                      ['Sell Qty', p.sell_quantity],
+                      ['Avg Price', `₹${(p.average_price || 0).toFixed(2)}`],
+                      ['LTP', `₹${(p.last_price || 0).toFixed(2)}`],
+                      ['Buy Value', `₹${(p.buy_value || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`],
+                      ['Sell Value', `₹${(p.sell_value || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`],
+                      ['Realised', `₹${(p.realised || 0).toFixed(2)}`],
+                      ['Unrealised', `₹${(p.unrealised || 0).toFixed(2)}`],
+                    ].map(([label, val]) => (
+                      <div key={String(label)}>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>{label}</p>
+                        <p style={{ fontSize: '0.9rem', fontWeight: 600, marginTop: '2px' }}>{val}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     );
@@ -975,6 +1118,9 @@ const App: React.FC = () => {
           </button>
           <button className={`nav-item ${activeTab === 'holdings' ? 'active' : ''}`} onClick={() => setActiveTab('holdings')}>
             <Wallet size={18} /> Holdings
+          </button>
+          <button className={`nav-item ${activeTab === 'positions' ? 'active' : ''}`} onClick={() => setActiveTab('positions')}>
+            <Activity size={18} /> Positions
           </button>
           <p className="sidebar-nav-label" style={{ marginTop: '0.75rem' }}>TRADING</p>
           <button className={`nav-item ${activeTab === 'place_order' ? 'active' : ''}`} onClick={() => setActiveTab('place_order')}>
@@ -1022,6 +1168,7 @@ const App: React.FC = () => {
           {activeTab === 'profile' && ProfileTab()}
           {activeTab === 'place_order' && OrdersTab()}
           {activeTab === 'holdings' && HoldingsTab()}
+          {activeTab === 'positions' && PositionsTab()}
 
           {activeTab === 'orders' && (() => {
             const statusColor: Record<string, string> = {
