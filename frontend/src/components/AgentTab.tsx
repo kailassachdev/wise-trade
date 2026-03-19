@@ -40,6 +40,8 @@ export const AgentTab: React.FC<AgentTabProps> = ({ brokerConnected, accountBala
   const [log, setLog] = useState<LogEntry[]>([]);
   const [positions, setPositions] = useState<any[]>([]);
   const [approving, setApproving] = useState<string | null>(null);
+  const [agentActive, setAgentActive] = useState(false);
+  const [toggling, setToggling] = useState(false);
 
   // Scan settings
   const [riskPct, setRiskPct] = useState('1.0');
@@ -49,12 +51,30 @@ export const AgentTab: React.FC<AgentTabProps> = ({ brokerConnected, accountBala
 
   const logRef = useRef<HTMLDivElement>(null);
 
+  // Fetch agent status on mount
+  useEffect(() => {
+    axios.get('/api/agent/status').then(r => setAgentActive(r.data.status === 'ON')).catch(() => {});
+  }, []);
+
   // Poll monitor every 30s
   useEffect(() => {
     fetchMonitor();
     const interval = setInterval(fetchMonitor, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleToggleAgent = async () => {
+    setToggling(true);
+    try {
+      const newState = !agentActive;
+      await axios.post(`/api/agent/toggle?active=${newState}`);
+      setAgentActive(newState);
+    } catch (e: any) {
+      alert('Agent toggle failed: ' + (e.response?.data?.detail || e.message));
+    } finally {
+      setToggling(false);
+    }
+  };
 
   const fetchMonitor = async () => {
     try {
@@ -113,17 +133,35 @@ export const AgentTab: React.FC<AgentTabProps> = ({ brokerConnected, accountBala
       {/* HEADER */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <Bot size={32} color="var(--accent-blue)" />
+          <Bot size={32} color={agentActive ? 'var(--accent-green)' : 'var(--accent-blue)'} />
           <div>
             <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>AI Trading Agent</h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Approval Mode — all orders need your confirmation before execution.</p>
           </div>
         </div>
-        {!brokerConnected && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#f59e0b', fontSize: '0.85rem' }}>
-            <AlertTriangle size={16} /> Broker not connected
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          {!brokerConnected && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#f59e0b', fontSize: '0.85rem' }}>
+              <AlertTriangle size={16} /> Broker not connected
+            </div>
+          )}
+          <button
+            onClick={handleToggleAgent}
+            disabled={toggling}
+            style={{
+              padding: '0.55rem 1.25rem', borderRadius: '8px', border: 'none',
+              background: agentActive ? 'var(--accent-red)' : 'var(--accent-green)',
+              color: 'white', fontWeight: 700, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: '6px',
+              opacity: toggling ? 0.7 : 1
+            }}
+          >
+            {toggling
+              ? <RefreshCw size={15} className="spin" />
+              : <Activity size={15} />}
+            {agentActive ? 'Stop Agent' : 'Start Agent'}
+          </button>
+        </div>
       </div>
 
       {/* SCAN CONTROLS */}

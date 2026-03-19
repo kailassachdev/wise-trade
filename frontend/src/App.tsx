@@ -602,12 +602,8 @@ const App: React.FC = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border)' }}>
           <div>
             <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Trading Overview</h2>
-            <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Welcome back{profile ? `, ${profile.user_shortname}` : ''}. AI Agent is currently {agentStatus}.</p>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Welcome back{profile ? `, ${profile.user_shortname}` : ''}. Use the <strong>AI Agent</strong> tab to scan and approve trades.</p>
           </div>
-          <button onClick={toggleAgent} className="btn-primary"
-            style={{ backgroundColor: agentStatus === 'ON' ? 'var(--accent-red)' : 'var(--accent-blue)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Power size={16} /> {agentStatus === 'ON' ? 'Stop Agent' : 'Start Agent'}
-          </button>
         </div>
 
         {/* Dynamic Margin Stats Row */}
