@@ -34,6 +34,25 @@ import { AgentTab } from './components/AgentTab';
 
 type Tab = 'home' | 'dashboard' | 'profile' | 'history' | 'risk' | 'orders' | 'holdings' | 'positions' | 'place_order' | 'agent';
 
+// ── count-up animation hook (module-level so Rules of Hooks are satisfied) ──
+function useCountUp(target: number, duration = 1200): number {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    if (target === 0) { setDisplay(0); return; }
+    let start: number | null = null;
+    const step = (ts: number) => {
+      if (!start) start = ts;
+      const progress = Math.min((ts - start) / duration, 1);
+      const ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+      setDisplay(Math.floor(ease * target));
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    const raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return display;
+}
+
 interface KiteProfile {
   user_id: string;
   user_type: string;
@@ -109,6 +128,13 @@ const App: React.FC = () => {
   const [chartData, setChartData] = useState<Candle[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
+
+  // ── Holdings count-up (must be unconditional at App level) ──────────────
+  const _holdings: any[] = portfolio.holdings || [];
+  const _holdingsInvested = _holdings.reduce((s: number, h: any) => s + ((h.average_price || 0) * ((h.quantity || 0) + (h.t1_quantity || 0))), 0);
+  const _holdingsCurrent  = _holdings.reduce((s: number, h: any) => s + ((h.last_price   || 0) * ((h.quantity || 0) + (h.t1_quantity || 0))), 0);
+  const animInvested = useCountUp(_holdingsInvested);
+  const animCurrent  = useCountUp(_holdingsCurrent);
 
   const openChart = async (position: any) => {
     setSelectedChartPosition(position);
@@ -913,79 +939,208 @@ const App: React.FC = () => {
   const HoldingsTab = () => {
     const holdings: any[] = portfolio.holdings || [];
 
-    const totalInvested = holdings.reduce((s: number, h: any) => s + ((h.average_price || 0) * (h.quantity || 0)), 0);
-    const totalCurrent = holdings.reduce((s: number, h: any) => s + ((h.last_price || 0) * (h.quantity || 0)), 0);
-    const totalPnl = totalCurrent - totalInvested;
-    const totalPnlPct = totalInvested ? (totalPnl / totalInvested) * 100 : 0;
+    const totalInvested = _holdingsInvested;
+    const totalCurrent  = _holdingsCurrent;
+    const totalPnl      = totalCurrent - totalInvested;
+    const totalPnlPct   = totalInvested ? (totalPnl / totalInvested) * 100 : 0;
+    const totalDayPnl   = holdings.reduce((s: number, h: any) => s + ((h.day_change || 0) * ((h.quantity || 0) + (h.t1_quantity || 0))), 0);
+    // animInvested / animCurrent are computed unconditionally at App level above
+
+    // Max absolute PnL used to size per-row bars
+    const maxAbsPnl = Math.max(...holdings.map((h: any) => {
+      const invested = (h.average_price || 0) * (h.quantity || 0);
+      const current  = (h.last_price   || 0) * (h.quantity || 0);
+      return Math.abs(current - invested);
+    }), 1);
+
+    const pnlIsUp  = totalPnl > 0;
+    const pnlIsDown = totalPnl < 0;
+    const dayIsUp  = totalDayPnl >= 0;
+
+
     return (
       <div className="fade-in">
+        {/* ── PAGE HEADER ── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border)' }}>
           <div>
             <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Holdings</h2>
-            <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Stocks currently held in your demat account</p>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Equity stocks held in your demat account</p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            {holdings.length > 0 && (
-              <div style={{ textAlign: 'right' }}>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total P&L</p>
-                <p style={{ fontSize: '1.5rem', fontWeight: 800, color: totalPnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-                  {totalPnl >= 0 ? '+' : ''}₹{totalPnl.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                </p>
-                <p style={{ fontSize: '0.85rem', color: totalPnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 600 }}>
-                  {totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(2)}%
-                </p>
-              </div>
-            )}
-            <button onClick={fetchPortfolio} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <RefreshCw size={14} /> Refresh
-            </button>
-          </div>
+          <button onClick={fetchPortfolio} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <RefreshCw size={14} /> Refresh
+          </button>
         </div>
+
+        {/* ── NOT CONNECTED ── */}
         {!brokerConnected ? (
           <div className="card glass" style={{ textAlign: 'center', padding: '3rem' }}>
             <Wallet size={48} color="var(--text-secondary)" style={{ margin: '0 auto 1rem' }} />
             <h3>Not Connected</h3>
             <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>Connect your Zerodha account to view your holdings.</p>
           </div>
+
         ) : holdings.length === 0 ? (
           <div className="card glass" style={{ textAlign: 'center', padding: '3rem' }}>
             <Package size={48} color="var(--text-secondary)" style={{ margin: '0 auto 1rem' }} />
             <h3>No Holdings</h3>
             <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>You don't have any equity holdings in your demat account.</p>
           </div>
+
         ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
-              <div className="card glass"><p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total Invested</p><h3 style={{ fontSize: '1.4rem', marginTop: '6px' }}>₹{totalInvested.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</h3></div>
-              <div className="card glass"><p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Current Value</p><h3 style={{ fontSize: '1.4rem', marginTop: '6px' }}>₹{totalCurrent.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</h3></div>
-              <div className="card glass"><p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total Holdings</p><h3 style={{ fontSize: '1.4rem', marginTop: '6px' }}>{holdings.length} stocks</h3></div>
-            </div>
-            <div className="card glass" style={{ overflow: 'hidden', padding: 0 }}>
-              <div className="holdings-header">
-                <span>Symbol</span><span style={{ textAlign: 'right' }}>Qty</span><span style={{ textAlign: 'right' }}>Avg Price</span><span style={{ textAlign: 'right' }}>LTP</span><span style={{ textAlign: 'right' }}>Invested</span><span style={{ textAlign: 'right' }}>Current</span><span style={{ textAlign: 'right' }}>P&L</span>
+            {/* ── SUMMARY STAT CARDS ── */}
+            <div className="holdings-summary-bar">
+              {/* Invested */}
+              <div style={{
+                padding: '1.4rem 1.6rem', margin: 0, borderRadius: '12px',
+                background: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)',
+                boxShadow: '0 4px 16px rgba(37,99,235,0.25)',
+                position: 'relative', overflow: 'hidden'
+              }}>
+                {/* subtle decorative circle */}
+                <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '90px', height: '90px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
+                <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Total Invested</p>
+                <h3 style={{ fontSize: '1.6rem', marginTop: '6px', color: '#fff', fontWeight: 800, letterSpacing: '-0.5px' }}>
+                  ₹{animInvested.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                </h3>
+                <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', marginTop: '5px' }}>{holdings.length} stock{holdings.length !== 1 ? 's' : ''} in portfolio</p>
               </div>
+
+              {/* Current Value */}
+              <div style={{
+                padding: '1.4rem 1.6rem', margin: 0, borderRadius: '12px',
+                background: pnlIsUp
+                  ? 'linear-gradient(135deg, #064e3b 0%, #059669 100%)'
+                  : 'linear-gradient(135deg, #7f1d1d 0%, #dc2626 100%)',
+                boxShadow: pnlIsUp ? '0 4px 16px rgba(5,150,105,0.25)' : '0 4px 16px rgba(220,38,38,0.25)',
+                position: 'relative', overflow: 'hidden'
+              }}>
+                <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '90px', height: '90px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
+                <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Current Value</p>
+                <h3 style={{ fontSize: '1.6rem', marginTop: '6px', color: '#fff', fontWeight: 800, letterSpacing: '-0.5px' }}>
+                  ₹{animCurrent.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                </h3>
+                {/* mini comparison bar: current vs invested */}
+                <div style={{ marginTop: '8px' }}>
+                  <div style={{ height: '3px', borderRadius: '2px', background: 'rgba(255,255,255,0.2)', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', borderRadius: '2px',
+                      width: totalInvested > 0 ? `${Math.min((totalCurrent / totalInvested) * 100, 100)}%` : '0%',
+                      background: 'rgba(255,255,255,0.8)',
+                      transition: 'width 0.5s ease'
+                    }} />
+                  </div>
+                  <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.65)', marginTop: '4px' }}>Mark-to-market</p>
+                </div>
+              </div>
+
+              {/* Total P&L */}
+              <div className="card glass" style={{ padding: '1.25rem 1.5rem', margin: 0, borderLeft: `3px solid ${pnlIsUp ? 'var(--accent-green)' : 'var(--accent-red)'}` }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700 }}>Total P&L</p>
+                <h3 style={{ fontSize: '1.35rem', marginTop: '6px', color: pnlIsUp ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                  {pnlIsUp ? '+' : ''}₹{Math.abs(totalPnl).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                </h3>
+                <p style={{ fontSize: '0.82rem', color: pnlIsUp ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 600, marginTop: '4px' }}>
+                  {pnlIsUp ? '▲' : '▼'} {Math.abs(totalPnlPct).toFixed(2)}% overall
+                </p>
+              </div>
+
+              {/* Day P&L */}
+              <div className="card glass" style={{ padding: '1.25rem 1.5rem', margin: 0, borderLeft: `3px solid ${dayIsUp ? 'var(--accent-green)' : 'var(--accent-red)'}` }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700 }}>Today's Change</p>
+                <h3 style={{ fontSize: '1.35rem', marginTop: '6px', color: dayIsUp ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                  {dayIsUp ? '+' : ''}₹{Math.abs(totalDayPnl).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                </h3>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Across all positions</p>
+              </div>
+            </div>
+
+            {/* ── HOLDINGS TABLE ── */}
+            <div className="card glass holdings-table" style={{ overflow: 'hidden', padding: 0, margin: 0 }}>
+              <div className="holdings-header">
+                <span>Symbol</span>
+                <span style={{ textAlign: 'right' }}>Qty</span>
+                <span style={{ textAlign: 'right' }}>Avg Price</span>
+                <span style={{ textAlign: 'right' }}>LTP</span>
+                <span style={{ textAlign: 'right' }}>Invested</span>
+                <span style={{ textAlign: 'right' }}>Current</span>
+                <span style={{ textAlign: 'right' }}>P&L</span>
+              </div>
+
               {holdings.map((h: any) => {
-                const invested = (h.average_price || 0) * (h.quantity || 0);
-                const current = (h.last_price || 0) * (h.quantity || 0);
-                const pnl = current - invested;
-                const pnlPct = invested ? (pnl / invested) * 100 : 0;
-                const isUp = pnl >= 0;
+                const totalQty = (h.quantity || 0) + (h.t1_quantity || 0);
+                const invested = (h.average_price || 0) * totalQty;
+                const current  = (h.last_price   || 0) * totalQty;
+                const pnl      = current - invested;
+                const pnlPct   = invested ? (pnl / invested) * 100 : 0;
+                const dayChg   = h.day_change || 0;
+                const isUp     = pnl >= 0;
+                const barWidth = Math.min((Math.abs(pnl) / maxAbsPnl) * 100, 100);
+
                 return (
                   <div key={h.tradingsymbol} className="holdings-row">
+                    {/* Symbol + exchange + day change */}
                     <div>
-                      <p style={{ fontWeight: 700 }}>
-                        {h.tradingsymbol}
-                      </p>
-                      <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{h.exchange}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <p style={{ fontWeight: 700, fontSize: '0.95rem' }}>{h.tradingsymbol}</p>
+                        {h.instrument_type && (
+                          <span style={{
+                            fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px',
+                            borderRadius: '4px', background: 'rgba(37,99,235,0.08)',
+                            color: 'var(--accent-blue)', textTransform: 'uppercase'
+                          }}>{h.instrument_type}</span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '2px' }}>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{h.exchange}</p>
+                        {dayChg !== 0 && (
+                          <span style={{ fontSize: '0.7rem', fontWeight: 600, color: dayChg >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                            {dayChg >= 0 ? '▲' : '▼'} ₹{Math.abs(dayChg).toFixed(2)} today
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div style={{ textAlign: 'right', fontWeight: 600 }}>{h.quantity}</div>
-                    <div style={{ textAlign: 'right' }}>₹{(h.average_price || 0).toFixed(2)}</div>
-                    <div style={{ textAlign: 'right', fontWeight: 700 }}>₹{(h.last_price || 0).toFixed(2)}</div>
-                    <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>₹{invested.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
-                    <div style={{ textAlign: 'right' }}>₹{current.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
-                    <div style={{ textAlign: 'right', color: isUp ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 700 }}>
-                      {isUp ? '+' : ''}₹{pnl.toFixed(0)}<br />
-                      <span style={{ fontSize: '0.75rem' }}>{isUp ? '+' : ''}{pnlPct.toFixed(2)}%</span>
+
+                    {/* Qty */}
+                    <div style={{ textAlign: 'right', fontWeight: 600 }}>
+                      {totalQty}
+                      {h.t1_quantity > 0 && <span style={{ fontSize: '0.6rem', color: 'var(--accent-blue)', marginLeft: '4px' }}>T1</span>}
+                    </div>
+
+                    {/* Avg Price */}
+                    <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                      ₹{(h.average_price || 0).toFixed(2)}
+                    </div>
+
+                    {/* LTP */}
+                    <div style={{ textAlign: 'right', fontWeight: 700 }}>
+                      ₹{(h.last_price || 0).toFixed(2)}
+                    </div>
+
+                    {/* Invested */}
+                    <div style={{ textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
+                      ₹{invested.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    </div>
+
+                    {/* Current */}
+                    <div style={{ textAlign: 'right', fontWeight: 600, fontSize: '0.88rem' }}>
+                      ₹{current.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    </div>
+
+                    {/* P&L with progress bar */}
+                    <div style={{ textAlign: 'right' }}>
+                      <p style={{ fontWeight: 700, color: isUp ? 'var(--accent-green)' : 'var(--accent-red)', fontSize: '0.92rem' }}>
+                        {isUp ? '+' : ''}₹{Math.abs(pnl).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      </p>
+                      <p style={{ fontSize: '0.72rem', color: isUp ? 'var(--accent-green)' : 'var(--accent-red)', fontWeight: 600 }}>
+                        {isUp ? '+' : ''}{pnlPct.toFixed(2)}%
+                      </p>
+                      <div style={{ background: 'var(--border)', borderRadius: '2px', height: '3px', marginTop: '4px', overflow: 'hidden' }}>
+                        <div className="holdings-pnl-bar" style={{
+                          width: `${barWidth}%`,
+                          background: isUp ? 'var(--accent-green)' : 'var(--accent-red)',
+                        }} />
+                      </div>
                     </div>
                   </div>
                 );
@@ -996,6 +1151,7 @@ const App: React.FC = () => {
       </div>
     );
   };
+
 
   // ─── POSITIONS TAB ────────────────────────────────────────────
   const PositionsTab = () => {
