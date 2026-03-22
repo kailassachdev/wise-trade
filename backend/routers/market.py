@@ -5,6 +5,8 @@ import logging
 import time
 import math
 import threading
+import asyncio
+from backend.services.ollama_service import ollama_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -217,3 +219,101 @@ def get_historical(symbol: str, interval: str = "15minute"):
     except Exception as e:
         logger.error(f"Historical API Error: {e}")
         return {"status": "error", "message": str(e), "candles": []}
+
+
+@router.get("/analyze/{symbol}")
+async def analyze_stock_with_ai(symbol: str, source: str = "positions"):
+    """
+    Fetch recent candle data for a symbol and ask Ollama (DeepSeek) for a
+    detailed, noobie-friendly stock analysis. Returns the AI narrative as plain text.
+    """
+    try:
+        # 1. Fetch fresh 5-day 15-min candle data
+        yf_sym = f"{symbol}.NS"
+        df = yf.download(yf_sym, period="5d", interval="15m", progress=False)
+
+        if df.empty:
+            return {"status": "error", "message": f"No candle data available for {symbol}"}
+
+        # 2. Build summary statistics from the candles
+        closes, highs, lows, vols = [], [], [], []
+        for idx, row in df.iterrows():
+            try:
+                if isinstance(row.get("Open"), (int, float)):
+                    closes.append(float(row["Close"]))
+                    highs.append(float(row["High"]))
+                    lows.append(float(row["Low"]))
+                    vols.append(int(row.get("Volume", 0)))
+                else:
+                    closes.append(float(row["Close"].iloc[0]))
+                    highs.append(float(row["High"].iloc[0]))
+                    lows.append(float(row["Low"].iloc[0]))
+                    vols.append(int(row["Volume"].iloc[0]) if "Volume" in row else 0)
+            except Exception:
+                continue
+
+        if len(closes) < 5:
+            return {"status": "error", "message": "Insufficient candle data for analysis"}
+
+        first, last     = closes[0], closes[-1]
+        hi5, lo5        = max(highs), min(lows)
+        avg_vol         = sum(vols) / max(len(vols), 1)
+        last_vol        = vols[-1] if vols else 0
+        pct_change      = ((last - first) / first) * 100 if first else 0
+        volatility_pct  = ((hi5 - lo5) / last) * 100 if last else 0
+        half            = len(closes) // 2
+        first_half_avg  = sum(closes[:half]) / max(half, 1)
+        second_half_avg = sum(closes[half:]) / max(len(closes) - half, 1)
+        momentum        = second_half_avg - first_half_avg
+        context         = "long-term holding (demat account)" if source == "holdings" else "short-term intraday trading position"
+
+        # 3. Build a thorough, structured prompt for Ollama
+        prompt = f"""
+You are an expert Indian stock market analyst and educator who specialises in explaining things to beginner traders.
+
+The user is looking at a 5-day 15-minute candlestick chart for the NSE stock: {symbol}.
+They hold this stock as a {context}.
+
+Here is the quantitative data:
+- 5-Day Price Change: {pct_change:+.2f}%
+- Starting Price (5 days ago): ₹{first:.2f}
+- Current (Latest) Price: ₹{last:.2f}
+- 5-Day High: ₹{hi5:.2f}
+- 5-Day Low: ₹{lo5:.2f}
+- Price Volatility Range: {volatility_pct:.1f}% of current price
+- Momentum (2nd half avg vs 1st half avg of 5 days): {momentum:+.2f} (positive = accelerating up, negative = accelerating down)
+- Last Session Volume: {last_vol:,}
+- Average Volume (5 days): {avg_vol:,.0f}
+- Volume Ratio (last vs avg): {last_vol/avg_vol:.1f}x
+- Total Candles Analysed: {len(closes)}
+
+Write a detailed, clear, beginner-friendly analysis in PLAIN TEXT (NO JSON, NO markdown). Structure it in these sections:
+
+1. **What the chart is telling us** (2-3 sentences about the overall trend)
+2. **Key price levels** (mention the high, low, and current price and what they mean)
+3. **Momentum & Volume insight** (what the volume and momentum say about buyer/seller interest)
+4. **Risk assessment** (what risks should the beginner be aware of)
+5. **What should I do?** (practical advice for a beginner holding this as a {context}. Be specific and actionable)
+
+Speak in a friendly, educational tone. Use simple language. Avoid jargon. Each section should be 2-4 sentences.
+Do NOT return JSON. Return only plain narrative text.
+"""
+
+        # 4. Call Ollama in plain-text mode (no JSON format)
+        import ollama as _ollama
+        response = await asyncio.to_thread(
+            _ollama.generate,
+            model=ollama_service.model,
+            prompt=prompt
+        )
+        analysis_text = response.get("response", "").strip()
+
+        if not analysis_text:
+            return {"status": "error", "message": "AI returned an empty response."}
+
+        return {"status": "success", "symbol": symbol, "analysis": analysis_text}
+
+    except Exception as e:
+        logger.error(f"AI Analyze Error for {symbol}: {e}")
+        return {"status": "error", "message": str(e)}
+

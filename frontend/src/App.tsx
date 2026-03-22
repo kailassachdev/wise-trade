@@ -128,6 +128,11 @@ const App: React.FC = () => {
   const [chartData, setChartData] = useState<Candle[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
+  const [chartSource, setChartSource] = useState<'holdings' | 'positions'>('positions');
+  // AI Analysis State
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   // ── Holdings count-up (must be unconditional at App level) ──────────────
   const _holdings: any[] = portfolio.holdings || [];
@@ -136,10 +141,13 @@ const App: React.FC = () => {
   const animInvested = useCountUp(_holdingsInvested);
   const animCurrent  = useCountUp(_holdingsCurrent);
 
-  const openChart = async (position: any) => {
+  const openChart = async (position: any, source: 'holdings' | 'positions' = 'positions') => {
     setSelectedChartPosition(position);
+    setChartSource(source);
     setChartLoading(true);
     setChartError(null);
+    setAiAnalysis(null);
+    setAiError(null);
     try {
       const res = await axios.get(`/api/market/historical/${position.tradingsymbol}`);
       if (res.data.status === 'success') {
@@ -155,6 +163,15 @@ const App: React.FC = () => {
     } finally {
       setChartLoading(false);
     }
+    // Kick off AI analysis in parallel (non-blocking)
+    setAiLoading(true);
+    axios.get(`/api/market/analyze/${position.tradingsymbol}?source=${source}`)
+      .then(r => {
+        if (r.data.status === 'success') setAiAnalysis(r.data.analysis);
+        else setAiError(r.data.message || 'AI analysis failed');
+      })
+      .catch(e => setAiError(e.response?.data?.message || e.message || 'AI analysis error'))
+      .finally(() => setAiLoading(false));
   };
 
   useEffect(() => {
@@ -1057,6 +1074,10 @@ const App: React.FC = () => {
 
             {/* ── HOLDINGS TABLE ── */}
             <div className="card glass holdings-table" style={{ overflow: 'hidden', padding: 0, margin: 0 }}>
+              {/* Chart hint */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0.5rem 1rem', background: 'rgba(59,130,246,0.06)', borderBottom: '1px solid var(--border)', fontSize: '0.75rem', color: 'var(--accent-blue)', fontWeight: 600 }}>
+                <LineChart size={13} /> Click any row to view its candlestick chart & analysis
+              </div>
               <div className="holdings-header">
                 <span>Symbol</span>
                 <span style={{ textAlign: 'right' }}>Qty</span>
@@ -1078,7 +1099,14 @@ const App: React.FC = () => {
                 const barWidth = Math.min((Math.abs(pnl) / maxAbsPnl) * 100, 100);
 
                 return (
-                  <div key={h.tradingsymbol} className="holdings-row">
+                  <div
+                    key={h.tradingsymbol}
+                    className="holdings-row chart-clickable-card"
+                    style={{ cursor: 'pointer', transition: 'background 0.18s, transform 0.15s' }}
+                    onClick={() => openChart(h, 'holdings')}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(59,130,246,0.05)'; e.currentTarget.style.transform = 'translateX(3px)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.transform = 'translateX(0)'; }}
+                  >
                     {/* Symbol + exchange + day change */}
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1090,6 +1118,7 @@ const App: React.FC = () => {
                             color: 'var(--accent-blue)', textTransform: 'uppercase'
                           }}>{h.instrument_type}</span>
                         )}
+                        <LineChart size={13} style={{ color: 'var(--text-secondary)', opacity: 0.6, marginLeft: 'auto' }} />
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '2px' }}>
                         <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{h.exchange}</p>
@@ -1286,44 +1315,125 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Chart Modal Overlay */}
-        {selectedChartPosition && (
-          <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
-            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 100,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem'
-          }}>
-            <div className="card glass fade-in" style={{ width: '100%', maxWidth: '900px', position: 'relative', padding: '2rem' }}>
-              <button 
-                onClick={() => setSelectedChartPosition(null)}
-                style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', padding: '0.4rem', cursor: 'pointer', color: 'var(--text-primary)' }}
-              >
-                <X size={20} />
-              </button>
-              
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-                <LineChart size={28} color="var(--accent-blue)" />
-                <div>
-                  <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>{selectedChartPosition.tradingsymbol}</h2>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{selectedChartPosition.exchange} • 15 Minute Interval (5 Days)</p>
-                </div>
-              </div>
+      </div>
+    );
+  };
 
-              {chartLoading ? (
-                <div style={{ height: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
-                  <RefreshCw className="spin" size={32} color="var(--text-secondary)" />
-                  <p style={{ color: 'var(--text-secondary)' }}>Loading historical data...</p>
-                </div>
-              ) : chartError ? (
-                <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-red)', textAlign: 'center', padding: '2rem' }}>
-                  <p><strong>Error:</strong> {chartError}</p>
-                </div>
-              ) : (
-                <CandlestickChart data={chartData} />
-              )}
-            </div>
+  // ── AI ANALYSIS PANEL ─────────────────────────────────────
+  const AiAnalysisPanel = () => {
+    if (chartLoading) return null; // wait for chart to load first
+
+    return (
+      <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border)', paddingTop: '1.5rem' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
+          <Bot size={20} color="var(--accent-blue)" />
+          <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>AI Analysis</h3>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+            powered by DeepSeek
+          </span>
+          {aiLoading && (
+            <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: 'var(--accent-blue)' }}>
+              <RefreshCw size={13} className="spin" /> Thinking...
+            </span>
+          )}
+        </div>
+
+        {aiError && (
+          <div style={{ padding: '0.9rem 1.1rem', borderRadius: '8px', background: 'rgba(220,38,38,0.06)', borderLeft: '3px solid var(--accent-red)', fontSize: '0.85rem', color: 'var(--accent-red)' }}>
+            ⚠️ Could not load AI analysis: {aiError}
           </div>
         )}
+
+        {aiLoading && !aiAnalysis && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            {[90, 75, 85, 60, 80].map((w, i) => (
+              <div key={i} style={{ height: '14px', borderRadius: '6px', background: 'rgba(255,255,255,0.06)', width: `${w}%`, animation: 'pulse 1.4s ease-in-out infinite', animationDelay: `${i * 0.1}s` }} />
+            ))}
+          </div>
+        )}
+
+        {aiAnalysis && (
+          <div style={{ fontSize: '0.88rem', lineHeight: 1.75, color: 'var(--text-primary)' }}>
+            {aiAnalysis.split('\n').filter(l => l.trim()).map((line, i) => {
+              // Detect section headers like "1. **What the chart...**" or "**...**"
+              const boldHeaderMatch = line.match(/^\d+\.\s*\*\*(.+?)\*\*(.*)$/);
+              const pureBoldMatch   = line.match(/^\*\*(.+?)\*\*(.*)$/);
+
+              if (boldHeaderMatch) {
+                return (
+                  <div key={i} style={{ marginTop: i === 0 ? 0 : '1.1rem', marginBottom: '0.3rem' }}>
+                    <p style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--accent-blue)', marginBottom: '4px' }}>
+                      {boldHeaderMatch[1]}
+                    </p>
+                    {boldHeaderMatch[2].trim() && <p>{boldHeaderMatch[2].trim()}</p>}
+                  </div>
+                );
+              }
+              if (pureBoldMatch) {
+                return (
+                  <div key={i} style={{ marginTop: i === 0 ? 0 : '1.1rem', marginBottom: '0.3rem' }}>
+                    <p style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--accent-blue)', marginBottom: '4px' }}>
+                      {pureBoldMatch[1]}
+                    </p>
+                    {pureBoldMatch[2].trim() && <p>{pureBoldMatch[2].trim()}</p>}
+                  </div>
+                );
+              }
+              // Regular paragraph
+              return <p key={i} style={{ marginBottom: '0.3rem' }}>{line}</p>;
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const GlobalChartModal = () => {
+    if (!selectedChartPosition) return null;
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)', zIndex: 200,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem'
+      }} onClick={e => { if (e.target === e.currentTarget) setSelectedChartPosition(null); }}>
+        <div className="card glass fade-in" style={{ width: '100%', maxWidth: '960px', position: 'relative', padding: '2rem', maxHeight: '92vh', overflowY: 'auto' }}>
+          <button
+            onClick={() => setSelectedChartPosition(null)}
+            style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', padding: '0.45rem', cursor: 'pointer', color: 'var(--text-primary)', zIndex: 1 }}
+          >
+            <X size={20} />
+          </button>
+
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+            <LineChart size={28} color="var(--accent-blue)" />
+            <div>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>{selectedChartPosition.tradingsymbol}</h2>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                {selectedChartPosition.exchange} • 15 Minute Interval (5 Days)
+                {chartSource === 'holdings' && <span style={{ marginLeft: '8px', fontSize: '0.75rem', background: 'rgba(37,99,235,0.12)', color: 'var(--accent-blue)', padding: '1px 8px', borderRadius: '10px', fontWeight: 600 }}>HOLDING</span>}
+              </p>
+            </div>
+          </div>
+
+          {/* Chart — always rendered (blink-free imperative SVG component) */}
+          {chartLoading ? (
+            <div style={{ height: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+              <RefreshCw className="spin" size={32} color="var(--text-secondary)" />
+              <p style={{ color: 'var(--text-secondary)' }}>Loading candlestick data...</p>
+            </div>
+          ) : chartError ? (
+            <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-red)', textAlign: 'center', padding: '2rem' }}>
+              <p><strong>Error:</strong> {chartError}</p>
+            </div>
+          ) : (
+            <CandlestickChart data={chartData} />
+          )}
+
+          {/* AI Analysis — loads independently below chart */}
+          {AiAnalysisPanel()}
+        </div>
       </div>
     );
   };
@@ -1541,6 +1651,7 @@ const App: React.FC = () => {
           )}
         </div>
       </div>
+      {GlobalChartModal()}
     </div>
   );
 };

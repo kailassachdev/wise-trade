@@ -262,6 +262,11 @@ body {
   }
 }
 
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
 .card {
   background-color: var(--bg-card);
   border: 1px solid var(--border);
