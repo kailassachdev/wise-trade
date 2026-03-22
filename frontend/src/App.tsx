@@ -755,10 +755,25 @@ const App: React.FC = () => {
                 const isSearchMode = searchQuery.length >= 2;
 
                 return (
-                  <div key={`${tick.symbol}-${tick.exchange}`} className={`watchlist-row ${flash ? `flash-${flash}` : ''}`}
-                    style={{ gridTemplateColumns: isSearchMode ? '3fr 1.5fr 1fr 1.5fr' : '1.8fr 1.2fr 1fr 1fr 1fr 1fr 1.5fr' }}>
+                  <div
+                    key={`${tick.symbol}-${tick.exchange}`}
+                    className={`watchlist-row ${flash ? `flash-${flash}` : ''}`}
+                    style={{
+                      gridTemplateColumns: isSearchMode ? '3fr 1.5fr 1fr 1.5fr' : '1.8fr 1.2fr 1fr 1fr 1fr 1fr 1.5fr',
+                      cursor: tick.last_price > 0 ? 'pointer' : 'default'
+                    }}
+                    onClick={() => tick.last_price > 0 && openChart(
+                      { tradingsymbol: tick.symbol, exchange: tick.exchange || 'NSE' },
+                      'positions'
+                    )}
+                    onMouseEnter={e => { if (tick.last_price > 0) e.currentTarget.style.background = 'rgba(59,130,246,0.05)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = ''; }}
+                  >
                     <div className="watchlist-symbol">
-                      <span className="symbol-name">{isSearchMode ? tick.name : tick.symbol}</span>
+                      <span className="symbol-name" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        {isSearchMode ? tick.name : tick.symbol}
+                        {tick.last_price > 0 && <LineChart size={11} style={{ color: 'var(--text-secondary)', opacity: 0.45, flexShrink: 0 }} />}
+                      </span>
                       <span className="symbol-exchange">{tick.symbol} • {tick.exchange || 'NSE'}</span>
                     </div>
                     <div style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
@@ -791,8 +806,12 @@ const App: React.FC = () => {
                     <div style={{ textAlign: 'right', display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                       {tick.last_price > 0 ? (
                         <>
-                          <button className="btn-trade-small btn-buy" onClick={() => handleWatchlistTrade(tick.symbol, 'BUY', tick.last_price)}>BUY</button>
-                          <button className="btn-trade-small btn-sell" onClick={() => handleWatchlistTrade(tick.symbol, 'SELL', tick.last_price)}>SELL</button>
+                          <button className="btn-trade-small btn-buy"
+                            onClick={e => { e.stopPropagation(); handleWatchlistTrade(tick.symbol, 'BUY', tick.last_price); }}
+                          >BUY</button>
+                          <button className="btn-trade-small btn-sell"
+                            onClick={e => { e.stopPropagation(); handleWatchlistTrade(tick.symbol, 'SELL', tick.last_price); }}
+                          >SELL</button>
                         </>
                       ) : (
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Off-hours/Unavailable</span>
