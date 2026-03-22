@@ -33,7 +33,8 @@ def scan_market(
     risk_pct:        float = Query(1.0,    description="Risk per trade as % of capital"),
     target_pct:      float = Query(5.0,    description="Target profit % per trade"),
     sl_pct:          float = Query(2.0,    description="Stop-loss % per trade"),
-    max_proposals:   int   = Query(5,      description="Max number of proposals to return"),
+    max_proposals:   int   = Query(2,      description="Max number of proposals to return"),
+    auto_approve:    bool  = Query(False,  description="Auto approve trades without prompt"),
 ):
     """Run penny stock screener and store proposals for approval."""
     try:
@@ -45,6 +46,12 @@ def scan_market(
             max_proposals=max_proposals,
         )
         ids = agent_service.add_proposals(proposals)
+        
+        # apply auto approve state
+        agent_service.auto_approve = auto_approve
+        if auto_approve:
+            agent_service.auto_approve_proposals(ids)
+            
         return {
             "status": "success",
             "count": len(proposals),
@@ -116,4 +123,10 @@ def get_monitor():
         "positions": net,
         "log": agent_service.get_log(),
         "proposals": agent_service.get_proposals(),
+        "auto_approve": agent_service.auto_approve,
     }
+
+@router.post("/auto_approve")
+async def toggle_auto_approve(active: bool):
+    agent_service.auto_approve = active
+    return {"status": "success", "auto_approve": active}

@@ -18,6 +18,7 @@ class AgentService:
         self.activity_log: list = []                      # most recent first
         self._monitor_thread: threading.Thread | None = None
         self._monitoring = False
+        self.auto_approve = False
 
     # ── Proposal CRUD ──────────────────────────────────────────────────────────
 
@@ -50,6 +51,36 @@ class AgentService:
             sym = self.proposals[pid]["symbol"]
             action = self.proposals[pid]["action"]
             self._log(f"Approved {action} order for {sym}.")
+
+    def auto_approve_proposals(self, pids: list):
+        """Helper to auto approve a list of proposal ids"""
+        # Note: We need to import approve_proposal or place the order directly here
+        from services.broker_service import broker_service
+        for pid in pids:
+            proposal = self.proposals.get(pid)
+            if not proposal or proposal["status"] != "pending":
+                continue
+            try:
+                action = proposal["action"]
+                price = proposal["limit_price"] if proposal["order_type"] == "LIMIT" else 0
+                
+                result = broker_service.place_order(
+                    variety=proposal["variety"],
+                    exchange=proposal["exchange"],
+                    tradingsymbol=proposal["symbol"],
+                    transaction_type=action,
+                    quantity=proposal["qty"],
+                    product=proposal.get("product", "MIS"),
+                    order_type=proposal["order_type"],
+                    price=price if price else None,
+                    trigger_price=None,
+                    disclosed_quantity=0,
+                    validity="DAY",
+                )
+                self.mark_approved(pid)
+                self._log(f"✅ Auto-approved {action} for {proposal['symbol']}")
+            except Exception as e:
+                self._log(f"❌ Auto-approve failed for {proposal['symbol']}: {e}")
 
     # ── Activity Log ───────────────────────────────────────────────────────────
 
@@ -159,6 +190,8 @@ class AgentService:
             "created_at": datetime.now().isoformat(),
         }
         self._log(f"🚨 SELL proposal created for {symbol} — {reason}")
+        if self.auto_approve:
+            self.auto_approve_proposals([pid])
 
 
 # Singleton

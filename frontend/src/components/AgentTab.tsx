@@ -47,13 +47,15 @@ export const AgentTab: React.FC<AgentTabProps> = ({ brokerConnected, accountBala
   const [riskPct, setRiskPct] = useState('1.0');
   const [targetPct, setTargetPct] = useState('5.0');
   const [slPct, setSlPct] = useState('2.0');
-  const [maxProposals, setMaxProposals] = useState('5');
+  const [maxProposals, setMaxProposals] = useState('2');
+  const [autoApprove, setAutoApprove] = useState(false);
 
   const logRef = useRef<HTMLDivElement>(null);
 
   // Fetch agent status on mount
+
   useEffect(() => {
-    axios.get('/api/agent/status').then(r => setAgentActive(r.data.status === 'ON')).catch(() => {});
+    axios.get('/api/agent/status').then(r => setAgentActive(r.data.status === 'ON')).catch(() => { });
   }, []);
 
   // Poll monitor every 30s
@@ -88,6 +90,9 @@ export const AgentTab: React.FC<AgentTabProps> = ({ brokerConnected, accountBala
         const newOnes = monitorProposals.filter((p: Proposal) => !existingIds.has(p.id));
         return [...prev, ...newOnes];
       });
+      if (res.data.auto_approve !== undefined && res.data.auto_approve !== autoApprove) {
+        setAutoApprove(res.data.auto_approve);
+      }
     } catch { /* silent */ }
   };
 
@@ -95,7 +100,7 @@ export const AgentTab: React.FC<AgentTabProps> = ({ brokerConnected, accountBala
     setScanning(true);
     setProposals([]);
     try {
-      const res = await axios.post(`/api/agent/scan?account_balance=${accountBalance}&risk_pct=${riskPct}&target_pct=${targetPct}&sl_pct=${slPct}&max_proposals=${maxProposals}`);
+      const res = await axios.post(`/api/agent/scan?account_balance=${accountBalance}&risk_pct=${riskPct}&target_pct=${targetPct}&sl_pct=${slPct}&max_proposals=${maxProposals}&auto_approve=${autoApprove}`);
       setProposals(res.data.proposals || []);
     } catch (e: any) {
       alert('Scan failed: ' + (e.response?.data?.message || e.message));
@@ -124,6 +129,17 @@ export const AgentTab: React.FC<AgentTabProps> = ({ brokerConnected, accountBala
     } catch { /* silent */ }
   };
 
+  const handleToggleAutoApprove = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked;
+    setAutoApprove(checked);
+    try {
+      await axios.post(`/api/agent/auto_approve?active=${checked}`);
+    } catch (e: any) {
+      alert('Could not toggle auto approve: ' + (e.response?.data?.detail || e.message));
+      setAutoApprove(!checked);
+    }
+  };
+
   const buyProposals = proposals.filter(p => p.action === 'BUY');
   const sellProposals = proposals.filter(p => p.action === 'SELL');
 
@@ -136,7 +152,9 @@ export const AgentTab: React.FC<AgentTabProps> = ({ brokerConnected, accountBala
           <Bot size={32} color={agentActive ? 'var(--accent-green)' : 'var(--accent-blue)'} />
           <div>
             <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>AI Trading Agent</h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Approval Mode — all orders need your confirmation before execution.</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+              {autoApprove ? 'Auto-Approve Mode — agent trades autonomously.' : 'Approval Mode — all orders need your confirmation before execution.'}
+            </p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
@@ -166,9 +184,36 @@ export const AgentTab: React.FC<AgentTabProps> = ({ brokerConnected, accountBala
 
       {/* SCAN CONTROLS */}
       <div className="card glass">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-          <ScanLine size={20} color="var(--accent-blue)" />
-          <h3 style={{ fontWeight: 700 }}>Market Scan Settings</h3>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <ScanLine size={20} color="var(--accent-blue)" />
+            <h3 style={{ fontWeight: 700 }}>Market Scan Settings</h3>
+          </div>
+          
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+            <span style={{ fontWeight: 700, fontSize: '0.9rem', color: autoApprove ? 'var(--accent-green)' : 'var(--text-secondary)' }}>
+              Auto-Approve Trades
+            </span>
+            <div style={{
+              width: '40px', height: '22px', borderRadius: '12px',
+              background: autoApprove ? 'var(--accent-green)' : 'var(--bg-main)',
+              border: `1px solid ${autoApprove ? 'var(--accent-green)' : 'var(--border)'}`,
+              display: 'flex', alignItems: 'center',
+              padding: '2px', transition: 'all 0.2s', position: 'relative'
+            }}>
+              <div style={{
+                width: '16px', height: '16px', borderRadius: '50%', background: 'white',
+                transform: `translateX(${autoApprove ? '18px' : '0'})`, transition: 'transform 0.2s',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+              }} />
+            </div>
+            <input 
+              type="checkbox" 
+              checked={autoApprove} 
+              onChange={handleToggleAutoApprove} 
+              style={{ display: 'none' }}
+            />
+          </label>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.25rem' }}>
@@ -316,15 +361,19 @@ const ProposalCard: React.FC<{
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
               <span style={{ fontWeight: 800, fontSize: '1.1rem' }}>{p.symbol}</span>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
+              <span style={{
+                fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
                 color: isBuy ? 'var(--accent-green)' : 'var(--accent-red)',
                 background: isBuy ? 'rgba(5,150,105,0.1)' : 'rgba(220,38,38,0.08)',
-                border: `1px solid ${isBuy ? 'rgba(5,150,105,0.3)' : 'rgba(220,38,38,0.3)'}` }}>
+                border: `1px solid ${isBuy ? 'rgba(5,150,105,0.3)' : 'rgba(220,38,38,0.3)'}`
+              }}>
                 {p.action}
               </span>
               {isAmo && (
-                <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
-                  color: '#f59e0b', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}>
+                <span style={{
+                  fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
+                  color: '#f59e0b', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)'
+                }}>
                   AMO
                 </span>
               )}
@@ -337,17 +386,21 @@ const ProposalCard: React.FC<{
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <button
             onClick={() => onReject(p.id)}
-            style={{ padding: '0.5rem 1.1rem', borderRadius: '8px', border: '1px solid rgba(220,38,38,0.4)',
-              background: 'rgba(220,38,38,0.08)', color: 'var(--accent-red)', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            style={{
+              padding: '0.5rem 1.1rem', borderRadius: '8px', border: '1px solid rgba(220,38,38,0.4)',
+              background: 'rgba(220,38,38,0.08)', color: 'var(--accent-red)', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px'
+            }}>
             <XCircle size={15} /> Reject
           </button>
           <button
             onClick={() => onApprove(p.id)}
             disabled={approving === p.id}
-            style={{ padding: '0.5rem 1.25rem', borderRadius: '8px', border: 'none',
+            style={{
+              padding: '0.5rem 1.25rem', borderRadius: '8px', border: 'none',
               background: isBuy ? 'var(--accent-green)' : 'var(--accent-red)', color: 'white',
               fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px',
-              opacity: approving === p.id ? 0.6 : 1 }}>
+              opacity: approving === p.id ? 0.6 : 1
+            }}>
             {approving === p.id ? <RefreshCw size={14} className="spin" /> : <CheckCircle size={15} />}
             {approving === p.id ? 'Placing...' : 'Approve'}
           </button>
