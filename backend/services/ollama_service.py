@@ -1,6 +1,8 @@
 import ollama
 import json
 from typing import Dict, Any, Optional, List
+import asyncio
+import re
 
 class OllamaService:
     def __init__(self, model: str = "deepseek-v3.1:671b-cloud"):
@@ -11,7 +13,9 @@ class OllamaService:
         Sends a structured prompt to Ollama and enforces strict JSON response.
         """
         try:
-            response = ollama.generate(
+            print(f"🤖 [Ollama] Querying Technical Data on {self.model}... (Expect delay)")
+            response = await asyncio.to_thread(
+                ollama.generate,
                 model=self.model,
                 prompt=prompt,
                 format="json"
@@ -19,8 +23,11 @@ class OllamaService:
             
             # Parse the response content
             content = response.get('response', '')
+            print(f"🤖 [Ollama] Technical Analysis complete. Payload: {content[:100]}...")
+            
+            clean_content = self._extract_json(content)
             try:
-                decision = json.loads(content)
+                decision = json.loads(clean_content)
                 # Basic validation of keys
                 required_keys = ["action", "confidence", "reason"]
                 if all(key in decision for key in required_keys):
@@ -41,6 +48,13 @@ class OllamaService:
             "reason": f"Fallback due to error: {reason}"
         }
 
+    def _extract_json(self, text: str) -> str:
+        """Extracts JSON block from chatty LLM responses."""
+        match = re.search(r'\{.*\}', text, re.DOTALL)
+        if match:
+            return match.group(0)
+        return text
+
     async def reflect_on_trades(self, trade_history: str) -> str:
         """
         Analyze past trades for adaptation.
@@ -54,12 +68,16 @@ class OllamaService:
         Return your analysis in structured JSON with keys: 'analysis', 'adjustments'.
         """
         try:
-            response = ollama.generate(
+            print(f"🤖 [Ollama] Analyzing Trade History on {self.model}...")
+            response = await asyncio.to_thread(
+                ollama.generate,
                 model=self.model,
                 prompt=prompt,
                 format="json"
             )
-            return response.get('response', '{}')
+            print("🤖 [Ollama] Trade Reflection complete.")
+            clean_content = self._extract_json(response.get('response', '{}'))
+            return clean_content
         except Exception as e:
             return json.dumps({"error": str(e)})
 
@@ -93,13 +111,17 @@ class OllamaService:
         }}
         """
         try:
-            response = ollama.generate(
+            print(f"🤖 [Ollama] Analyzing corporate news on {self.model}...")
+            response = await asyncio.to_thread(
+                ollama.generate,
                 model=self.model,
                 prompt=prompt,
                 format="json"
             )
             content = response.get('response', '')
-            return json.loads(content)
+            print(f"🤖 [Ollama] News Analysis complete. Output: {content[:150]}...")
+            clean_content = self._extract_json(content)
+            return json.loads(clean_content)
         except Exception as e:
             print(f"Ollama News Analysis Error: {e}")
             return self._fallback_decision(str(e))
@@ -145,13 +167,17 @@ class OllamaService:
         }}
         """
         try:
-            response = ollama.generate(
+            print(f"🤖 [Ollama] Analyzing tweets for ${symbol} on {self.model}...")
+            response = await asyncio.to_thread(
+                ollama.generate,
                 model=self.model,
                 prompt=prompt,
                 format="json"
             )
             content = response.get('response', '')
-            return json.loads(content)
+            print(f"🤖 [Ollama] Social Media Analysis complete. Sentiment: {content[:150]}...")
+            clean_content = self._extract_json(content)
+            return json.loads(clean_content)
         except Exception as e:
             print(f"Ollama Social Media Analysis Error: {e}")
             return self._fallback_decision(str(e))

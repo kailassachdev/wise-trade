@@ -34,6 +34,21 @@ class AgentService:
         self._log(f"Screener returned {len(proposals)} proposals.")
         return ids
 
+    def add_proposal(self, p: dict) -> str:
+        """Add a single proposal (used by background AI scheduler)"""
+        pid = str(uuid.uuid4())[:8]
+        self.proposals[pid] = {
+            **p, 
+            "id": pid, 
+            "status": "pending", 
+            "created_at": datetime.now().isoformat()
+        }
+        sym = p.get("symbol", "?")
+        action = p.get("action", "?")
+        reason = p.get("reason", "")
+        self._log(f"🧠 AI Agent generated {action} proposal for {sym}: {reason[:50]}...")
+        return pid
+
     def get_proposals(self) -> list:
         return [p for p in self.proposals.values() if p["status"] == "pending"]
 
@@ -55,7 +70,7 @@ class AgentService:
     def auto_approve_proposals(self, pids: list):
         """Helper to auto approve a list of proposal ids"""
         # Note: We need to import approve_proposal or place the order directly here
-        from services.broker_service import broker_service
+        from .broker_service import broker_service
         for pid in pids:
             proposal = self.proposals.get(pid)
             if not proposal or proposal["status"] != "pending":
@@ -110,7 +125,7 @@ class AgentService:
     def _monitor_loop(self):
         """Runs every 30 seconds and checks open positions against target/SL."""
         import yfinance as yf
-        from services.broker_service import broker_service
+        from .broker_service import broker_service
 
         while self._monitoring:
             try:
@@ -167,7 +182,7 @@ class AgentService:
             if p.get("symbol") == symbol and p.get("action") == "SELL" and p.get("status") == "pending":
                 return  # Already have a pending sell for this stock
 
-        from services.screener_service import get_order_params
+        from .screener_service import get_order_params
         order_params = get_order_params(price)
 
         pid = str(uuid.uuid4())[:8]

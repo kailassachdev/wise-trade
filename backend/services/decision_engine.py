@@ -2,10 +2,12 @@ from .ollama_service import ollama_service
 from .indicator_service import indicator_service
 from .news_service import news_service
 from .twitter_service import twitter_service
-from .trade_request_service import trade_request_service
+from .agent_service import agent_service
+from .screener_service import get_order_params
 from typing import Dict, Any, List, Optional
 import pandas as pd
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -15,26 +17,12 @@ class DecisionEngine:
         Flow: Indicators -> Deterministic Filter -> Optional LLM -> Risk Check
         """
         # 1. Calculate Indicators
-        indicators = indicator_service.get_all_indicators(market_data)
+        indicators = await asyncio.to_thread(indicator_service.get_all_indicators, market_data)
         
-        # 2. Deterministic Pre-filter (Minimal LLM usage)
-        rsi = indicators["rsi"]
-        macd = indicators["macd"]
-        
-        strong_signal = False
-        if rsi < 30 or rsi > 70:
-            strong_signal = True
-        if abs(macd["hist"]) > 0.5:
-            strong_signal = True
-            
-        if not strong_signal:
-            return {
-                "action": "HOLD",
-                "confidence": 0.4,
-                "reason": "No strong indicator signal. Skipping LLM for performance."
-            }
+        # 2. Skip Deterministic Filter as requested — Use LLM Model
+        # (Pass the indicators directly to DeepSeek)
 
-        # 3. Optional LLM Call (DeepSeek via Ollama)
+        # 3. LLM Call (DeepSeek via Ollama)
         prompt = self._build_prompt(indicators, user_config)
         llm_decision = await ollama_service.generate_decision(prompt)
         
@@ -47,7 +35,7 @@ class DecisionEngine:
         Fetch news, analyze with LLM, and submit trade requests via backend API.
         """
         results = []
-        announcements = news_service.get_latest_announcements()
+        announcements = await asyncio.to_thread(news_service.get_latest_announcements)
         
         for ann in announcements[:5]:
             news_str = news_service.format_announcement_for_llm(ann)
@@ -64,18 +52,32 @@ class DecisionEngine:
             
             if action in ["BUY", "SELL"] and confidence > 0.7:
                 order_params = analysis.get("order_params", {})
-                # SECURE: Submit via backend API instead of direct broker call
-                api_response = await trade_request_service.submit_trade_request(
-                    symbol=order_params.get("tradingsymbol", "UNKNOWN"),
-                    transaction_type=order_params.get("transaction_type", action),
-                    quantity=order_params.get("quantity", 1),
-                    exchange=order_params.get("exchange", "BSE"),
-                    product=order_params.get("product", "CNC"),
-                    order_type=order_params.get("order_type", "MARKET"),
-                    source="news_agent",
-                    reason=f"BSE News: {ann.get('NEWSSUB', 'N/A')[:100]}"
-                )
-                result["api_response"] = api_response
+                sym = order_params.get("tradingsymbol", "UNKNOWN")
+                
+                # Fetch recent ltp or put a placeholder price
+                # For a real app, query market snapshot. Assuming 0 for now so order_params can handle it
+                price = order_params.get("price", 0) 
+                
+                pid = agent_service.add_proposal({
+                    "symbol": sym,
+                    "action": action,
+                    "price": price,
+                    "qty": order_params.get("quantity", 1),
+                    "target": None,
+                    "stop_loss": None,
+                    "score": confidence,
+                    "reason": f"News Catalyst: {ann.get('NEWSSUB', 'N/A')[:100]}",
+                    "variety": "regular",
+                    "order_type": order_params.get("order_type", "MARKET"),
+                    "limit_price": price,
+                    "exchange": order_params.get("exchange", "BSE"),
+                    "product": order_params.get("product", "CNC")
+                })
+                
+                if agent_service.auto_approve:
+                    agent_service.auto_approve_proposals([pid])
+                
+                result["api_response"] = {"status": "proposal_created", "pid": pid}
             
             results.append(result)
             
@@ -87,7 +89,7 @@ class DecisionEngine:
         """
         results = []
         for symbol in symbols:
-            tweets = twitter_service.get_stock_mentions(symbol, limit=10)
+            tweets = await asyncio.to_thread(twitter_service.get_stock_mentions, symbol, limit=10)
             if not tweets:
                 continue
 
@@ -104,18 +106,28 @@ class DecisionEngine:
             
             if action in ["BUY", "SELL"] and confidence > 0.8:
                 order_params = analysis.get("order_params", {})
-                # SECURE: Submit via backend API instead of direct broker call
-                api_response = await trade_request_service.submit_trade_request(
-                    symbol=symbol,
-                    transaction_type=order_params.get("transaction_type", action),
-                    quantity=order_params.get("quantity", 1),
-                    exchange=order_params.get("exchange", "NSE"),
-                    product=order_params.get("product", "MIS"),
-                    order_type=order_params.get("order_type", "MARKET"),
-                    source="social_agent",
-                    reason=analysis.get("reason", "Social media sentiment")[:100]
-                )
-                result["api_response"] = api_response
+                price = order_params.get("price", 0)
+                
+                pid = agent_service.add_proposal({
+                    "symbol": symbol,
+                    "action": action,
+                    "price": price,
+                    "qty": order_params.get("quantity", 1),
+                    "target": None,
+                    "stop_loss": None,
+                    "score": confidence,
+                    "reason": f"Twitter Sentiment: {analysis.get('reason', 'Positive social media sentiment')[:100]}",
+                    "variety": "regular",
+                    "order_type": order_params.get("order_type", "MARKET"),
+                    "limit_price": price,
+                    "exchange": order_params.get("exchange", "NSE"),
+                    "product": order_params.get("product", "MIS")
+                })
+                
+                if agent_service.auto_approve:
+                    agent_service.auto_approve_proposals([pid])
+                    
+                result["api_response"] = {"status": "proposal_created", "pid": pid}
             
             results.append(result)
             
@@ -130,13 +142,17 @@ class DecisionEngine:
         Current Price: {indicators['last_price']}
         
         User Strategy: {user_config.get('risk_level', 'MEDIUM')} risk
+        Available Capital: ₹{user_config.get('capital', 10000.0):.2f}
         
-        Analyze the market condition and decide: BUY, SELL, or HOLD.
-        You MUST return valid JSON format:
+        Analyze the market condition carefully. Look aggressively for ANY growth potential or bounce opportunities, even if the market is SIDEWAYS or OVERSOLD. 
+        If there is a chance for future price growth or a breakout, you must strongly consider recommending a BUY action.
+        Only recommend HOLD if the stock shows zero potential for short-term growth.
+        
+        You MUST return ONLY valid JSON format with NO markdown wrappers or conversational text:
         {{
             "action": "BUY/SELL/HOLD",
             "confidence": float (0-1),
-            "reason": "string"
+            "reason": "string explaining exactly why this has growth potential"
         }}
         """
 
